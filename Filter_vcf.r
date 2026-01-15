@@ -30,6 +30,6 @@ rm(list = ls())
 ##############################
 ##### Import thinned vcf #####
 ##############################
-
+toto
 data <- read.vcfR("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/08_Calling/ddRAD_multiple_choice_experiment/thinned.vcf") %>% 
   vcfR2genind()
