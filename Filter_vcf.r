@@ -37,75 +37,60 @@ Plot_Missing_Data_with_Threshold <- function(df, threshold_missing_data = 0.0, d
 ##############################
 ##### Select random snps #####
 ##############################
+# Set the random seed to make the random selection of SNPs replicable
 set.seed(1234)
 
+# Get the list of all SNPs that were outputed from populations
 all_snps <- read.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/08_Calling/ddRAD_multiple_choice_experiment/sumstats.tsv",
                    header = TRUE, sep = "\t")
 
 
+# Select one random SNP per locus and per chromosome
 random_snps_selected <- all_snps %>% 
   select(Locus.ID, Chr, BP, Col) %>% 
   mutate(Locus_name = paste(Locus.ID, Col, sep = ":")) %>% 
   group_by(Chr, Locus.ID) %>% 
   sample_n(size = 1)
 
-# 
-# random_snps_selected %>%
-#   ungroup %>%
-#   select(Chr, BP) %>%
-#   write.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/whitelist.tsv",
-#                   sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE)
-# 
-# system2("/shared/software/miniconda/envs/vcftools-0.1.16/bin/vcftools",
-#         args = paste0(" --vcf /shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/08_Calling/ddRAD_multiple_choice_experiment/populations.snps.vcf",
-#                       " --out /shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/thinned",
-#                       " --positions /shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/whitelist.tsv",
-#                       " --recode"))
+# Uncomment to filter the vcf
+random_snps_selected %>%
+  ungroup %>%
+  select(Chr, BP) %>%
+  write.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/whitelist.tsv",
+                  sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE)
+
+system2("/shared/software/miniconda/envs/vcftools-0.1.16/bin/vcftools",
+        args = paste0(" --vcf /shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/08_Calling/ddRAD_multiple_choice_experiment/populations.snps.vcf",
+                      " --out /shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/thinned",
+                      " --positions /shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/whitelist.tsv",
+                      " --recode"))
 
 
-##############################
-######### Import data ########
-##############################
-# random_snps_selected <- random_snps_selected %>% 
-#   rename(Chromosome = Chr,
-#          Locus = Locus.ID) %>% 
-#   mutate(Chromosome = str_remove_all(Chromosome, "\\.1"))
+#####################
+#### SNP removal ####
+#####################
+# Some locus are present several times on the same position in the genome. Thus,
+# when running vcftools, the filtering process keeps the same SNP several times
+# (from the different RADtags at the same position). In this part, we filter out
+# the unwanted SNPs.
 
-random_snps_selected <- read.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/Snps_selected_randomly.tsv",
-                                   header = TRUE, sep = "\t")
-# Thinned vcf
+# Import the vcf file to check the list of loci
 data <- read.vcfR("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/thinned.recode.vcf") %>% 
   vcfR2genind()
 
-data <- data[loc = (locNames(data) %>% str_remove_all(":\\+|:\\-")) %in% random_snps_selected$Locus_name]
+# Look for loci that are not wanted in the vcf file
+unwanted_snps <- locNames(data)[(str_remove_all(locNames(data), ":\\+|:\\-") %!in% random_snps_selected$Locus_name)]
 
-# Metadata
-metadata <- read.table("/shared/projects/sexisol/input/Basile/Multiple_choice_experiment/Data/metadata.tsv",
-                       sep = "\t", header = TRUE) %>% 
-  mutate(Size = str_replace_all(Size, ",", ".") %>% as.numeric)
+# Make a file containing the unwanted SNPs
+unwanted_snps %>% 
+  as_tibble %>% 
+  write.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/unwanted_snps.txt",
+              sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE)
 
-chromosome_sizes <- read.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/08_Calling/ddRAD_multiple_choice_experiment/catalog.chrs.tsv",
-                               sep = "\t", header = TRUE, comment = "") %>% 
-  rename(Chromosome = X..Chrom) %>% 
-  arrange(desc(Length)) %>%
-  mutate(Chromosome = str_remove_all(Chromosome, "\\.1"),
-         Cumul_Length = lag(cumsum(Length), default = 0))
-
-summary_stats <- read.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/08_Calling/ddRAD_multiple_choice_experiment/populations.sumstats.tsv",
-                            sep = "\t", header = TRUE,
-                            skip = 1,
-                            comment = "") %>% 
-  rename(Locus = X..Locus.ID,
-         Chromosome = Chr) %>% 
-  select(Locus, Chromosome, BP, Col) %>% 
-  unique %>% 
-  mutate(Chromosome = str_remove_all(Chromosome, "\\.1")) %>% 
-  left_join(chromosome_sizes %>% 
-              select(Chromosome, Cumul_Length), by = "Chromosome") %>% 
-  mutate(BP_cumul = BP + Cumul_Length) %>% 
-  select(-Cumul_Length) %>% 
-  right_join(random_snps_selected, by = c("Locus", "Chromosome", "BP", "Col"))
-
+# Call grep to filter out the unwanted SNPs
+system2("grep", args = paste0("-v -f /shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/unwanted_snps.txt",
+                              " /shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/thinned.recode.vcf",
+                              " > /shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/thinned_whithout_unwanted_snps.vcf"))
 
 ##############################
 #### Analyse missing data ####
@@ -127,6 +112,8 @@ missing_values_per_snp %>%
   rename(Proportion_missing = Proportion_missing_per_SNP) %>% 
   Plot_Missing_Data_with_Threshold(0.1)
 
+# No problem on the SNPs, let's look at the individuals
+
 # Do the same for the proportion of missing values per individual
 missing_values_per_indiv <- data@tab %>% 
   is.na %>% 
@@ -139,59 +126,21 @@ missing_values_per_indiv <- data@tab %>%
 
 missing_values_per_indiv %>% 
   rename(Proportion_missing = Proportion_missing_per_indiv) %>% 
-  Plot_Missing_Data_with_Threshold(0.5, dimension = "Indivs")
+  Plot_Missing_Data_with_Threshold(0.5, dimension = "Indivs", bins = 50)
 
-# See which individuals have the most missing data according to the threshold
-missing_values_per_indiv %>% 
-  filter(Proportion_missing_per_indiv >= 0.21) %>% 
-  arrange(desc(Proportion_missing_per_indiv)) %>%
-  left_join(metadata, by = join_by("Indiv" == "ID_DNA_RAD")) %>% 
-  head(200) %>% 
-  select(Indiv, Proportion_missing_per_indiv, Family_level, Sex)
-
-
-##############################
-#### Remove individuals with more than  50% of missing data####
-##############################
+# We have individuals with a lot of missing values, so we need to filter out
+# some individuals to run the PCA
 indiv_less_than_50missing_data <- missing_values_per_indiv %>% 
   filter(Proportion_missing_per_indiv < 0.5) %>% 
-  pull(Indiv)
+  select(Indiv)
 
-# metadata %>% 
-#   filter(ID_DNA_RAD %in% indiv_less_than_50missing_data) %>% 
-#   pull(Label)
+indiv_less_than_50missing_data %>% 
+  write.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/Indivs_to_keep.txt",
+              sep = "t", col.names = FALSE, row.names = FALSE, quote = FALSE)
 
-data_filt <- data[indiv_less_than_50missing_data]
-
-
-pca <- scaleGen(data_filt, NA.method="mean",scale=F,center=T) %>% 
-  dudi.pca(scale=T, nf = 5,scannf = F)
-
-# Extract the percentage of explained variance of interesting axis
-var_ax1 <- ((pca$eig[1] / sum(pca$eig)) * 100) %>% round(digits = 2)
-var_ax2 <- ((pca$eig[2] / sum(pca$eig)) * 100) %>% round(digits = 2)
-var_ax3 <- ((pca$eig[3] / sum(pca$eig)) * 100) %>% round(digits = 2)
-var_ax4 <- ((pca$eig[4] / sum(pca$eig)) * 100) %>% round(digits = 2)
-var_ax5 <- ((pca$eig[5] / sum(pca$eig)) * 100) %>% round(digits = 2)
-
-pca$li %>% 
-  rownames_to_column("ID_DNA_RAD") %>% 
-  left_join(metadata, by = "ID_DNA_RAD") %>% 
-  mutate(toto = grepl("5300", ID_DNA_RAD)) %>% 
-  ggplot() +
-  geom_point(aes(x = Axis1, y = Axis2, color = Phenotype))
-
-
-
-pca$co %>% 
-  rownames_to_column("Position") %>% 
-  separate_wider_delim(Position, names = c("Locus", "Col", "Allele"), ":") %>% 
-  filter(grepl("0", Allele)) %>% 
-  mutate(Locus = Locus %>% as.integer,
-         Locus_name = paste(Locus, Col, sep = ":"),
-         Col = Col %>% as.integer) %>% 
-  left_join(summary_stats, by = c("Locus", "Col", "Locus_name")) %>% 
-  ggplot(aes(x = BP_cumul, y = abs(Comp1))) +
-  geom_point()
-
-
+# Remove individuals that have too much missing data
+system2("/shared/software/miniconda/envs/vcftools-0.1.16/bin/vcftools",
+        args = paste0("--vcf /shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/thinned_whithout_unwanted_snps.vcf",
+                      " --keep /shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/Indivs_to_keep.txt",
+                      " --recode --stdout",
+                      " > /shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/thinned_whithout_unwanted_snps_and_without_missing_indivs.vcf"))
