@@ -21,6 +21,7 @@ my_theme <- theme_bw() +
 data <- read.vcfR("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/thinned_whithout_unwanted_snps_and_without_missing_indivs.vcf") %>% 
   vcfR2genind()
 
+# Import the random SNPs that were selected
 random_snps_selected <- read.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/Snps_selected_randomly.tsv",
                                    header = TRUE, sep = "\t")
 
@@ -29,34 +30,18 @@ metadata <- read.table("/shared/projects/sexisol/input/Basile/Multiple_choice_ex
                        sep = "\t", header = TRUE) %>% 
   mutate(Size = str_replace_all(Size, ",", ".") %>% as.numeric)
 
-chromosome_sizes <- read.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/08_Calling/ddRAD_multiple_choice_experiment/catalog.chrs.tsv",
-                               sep = "\t", header = TRUE, comment = "") %>% 
-  rename(Chromosome = X..Chrom) %>% 
-  arrange(desc(Length)) %>%
-  mutate(Chromosome = str_remove_all(Chromosome, "\\.1"),
-         Cumul_Length = lag(cumsum(Length), default = 0))
+# Get the sizes of the chromosomes and compute where the next chromosome will start on the manhattan plot
+chromosome_sizes <- read.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/Data/chromosome_sizes.tsv",
+                               sep = "\t", header = TRUE)
 
-summary_stats <- read.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/08_Calling/ddRAD_multiple_choice_experiment/populations.sumstats.tsv",
-                            sep = "\t", header = TRUE,
-                            skip = 1,
-                            comment = "") %>% 
-  rename(Locus = X..Locus.ID,
-         Chromosome = Chr) %>% 
-  select(Locus, Chromosome, BP, Col) %>% 
-  unique %>% 
-  mutate(Chromosome = str_remove_all(Chromosome, "\\.1")) %>% 
-  left_join(chromosome_sizes %>% 
-              select(Chromosome, Cumul_Length), by = "Chromosome") %>% 
-  mutate(BP_cumul = BP + Cumul_Length) %>% 
-  select(-Cumul_Length) %>% 
-  right_join(random_snps_selected, by = c("Locus", "Chromosome", "BP", "Col"))
+# Import the sumstats of the thinned vcf (locus, chromosome, position, ...)
+summary_stats <- read.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/Data/sumstats_thinned_50k.tsv",
+                            sep = "\t", header = TRUE)
 
-
-
-
-
-
-pca <- scaleGen(data_filt, NA.method="mean",scale=F,center=T) %>% 
+##############################
+########### Run PCA ##########
+##############################
+pca <- scaleGen(data, NA.method="mean",scale=F,center=T) %>% 
   dudi.pca(scale=T, nf = 5,scannf = F)
 
 # Extract the percentage of explained variance of interesting axis
@@ -66,15 +51,18 @@ var_ax3 <- ((pca$eig[3] / sum(pca$eig)) * 100) %>% round(digits = 2)
 var_ax4 <- ((pca$eig[4] / sum(pca$eig)) * 100) %>% round(digits = 2)
 var_ax5 <- ((pca$eig[5] / sum(pca$eig)) * 100) %>% round(digits = 2)
 
+# Plot the PCA
 pca$li %>% 
   rownames_to_column("ID_DNA_RAD") %>% 
   left_join(metadata, by = "ID_DNA_RAD") %>% 
-  mutate(toto = grepl("5300", ID_DNA_RAD)) %>% 
-  ggplot() +
-  geom_point(aes(x = Axis1, y = Axis2, color = Phenotype))
+  filter((Axis1 < -25 & Axis2 > 50) | Mother_ID == "M22-1") %>% 
+  # mutate(toto = grepl("5300", ID_DNA_RAD)) %>% 
+  ggplot(aes(x = Axis1, y = Axis2)) +
+  geom_point(aes(color = Mother_ID)) +
+  geom_text(aes(label = Label))
 
 
-
+# Look at the contribution of each SNP along the genome to the axes of the PCA
 pca$co %>% 
   rownames_to_column("Position") %>% 
   separate_wider_delim(Position, names = c("Locus", "Col", "Allele"), ":") %>% 
