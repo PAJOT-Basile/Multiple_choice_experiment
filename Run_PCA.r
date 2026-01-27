@@ -55,11 +55,12 @@ var_ax5 <- ((pca$eig[5] / sum(pca$eig)) * 100) %>% round(digits = 2)
 pca$li %>% 
   rownames_to_column("ID_DNA_RAD") %>% 
   left_join(metadata, by = "ID_DNA_RAD") %>% 
-  filter((Axis1 < -25 & Axis2 > 50) | Mother_ID == "M22-1") %>% 
+  # filter((Axis1 < -25 & Axis2 > 50) | Mother_ID == "M22-1") %>% 
   # mutate(toto = grepl("5300", ID_DNA_RAD)) %>% 
-  ggplot(aes(x = Axis1, y = Axis2)) +
-  geom_point(aes(color = Mother_ID)) +
-  geom_text(aes(label = Label))
+  ggplot(aes(x = Axis1, y = Axis2, colour = Phenotype)) +
+  geom_point()
+  # +
+  # geom_text(aes(label = Label))
 
 
 # Look at the contribution of each SNP along the genome to the axes of the PCA
@@ -74,5 +75,19 @@ pca$co %>%
   ggplot(aes(x = BP_cumul, y = abs(Comp1))) +
   geom_point()
 
-
+##############################
+###### Attribute species #####
+##############################
+# For mothers, attribute a species
+pca$li %>% 
+  rownames_to_column("ID_DNA_RAD") %>% 
+  left_join(metadata, by = "ID_DNA_RAD") %>% 
+  mutate(Species = case_when(
+    Axis1 < 0 ~ "praehirsuta",
+    Axis1 > 0 ~ "forsmani"
+  )) %>%
+  select(ID_DNA_RAD, Species) %>%
+  left_join(metadata, by = "ID_DNA_RAD") %>% 
+  write.table("/shared/projects/sexisol/input/Basile/Multiple_choice_experiment/Data/metadata.tsv",
+              sep = "\t", col.names = TRUE, row.names = FALSE, quote = FALSE)
 
