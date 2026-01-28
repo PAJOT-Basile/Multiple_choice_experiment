@@ -1,0 +1,19 @@
+########################  Dependencies  ###############################
+channels:
+  - bioconda
+  - conda-forge
+  - nodefaults
+dependencies:
+  # R and R packages
+  - r-base = 4.5.2
+  - r-pacman = 0.5.1
+  - r-vcfR = 1.15.0
+  - r-adegenet = 2.1.11
+  - r-yaml = 2.3.12
+  - r-tidyverse = 2.0.0
+  # Python and Python packages
+  - python = 3.12
+  - pysam = 0.23.3
+  - numpy = 2.4.0
+  - pandas = 2.3.3
+  - PyYAML = 6.0.3
