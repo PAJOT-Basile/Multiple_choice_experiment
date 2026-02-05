@@ -5,6 +5,7 @@
 ########## Libraries ##########
 ###############################
 from warnings import simplefilter
+import string
 import random as rd
 import numpy as np
 import pandas as pd
@@ -99,7 +100,7 @@ parser.add_argument("-s", "--sub_sample", help="Add a filtration condition on th
                     "The possible filtrations are: 'Offspring' to select only offsprings, 'Parents_male' to "
                     "select only male parents and 'Parents_female' to select only female parents.")
 args = parser.parse_args()
-sub_sample = args.sub_sample.title()
+sub_sample = string.capwords(args.sub_sample)
 
 print("".join(["\tMaking genotype matrix for ", sub_sample]))
 # Import variables in the configuration file
@@ -130,21 +131,21 @@ match sub_sample:
                              "parents") & (metadata["Sex"] == "F")]
     case _:
         pass
+
 ###############################
 ###### Genotype matrix ########
 ###############################
 # Make a list of all the samples to keep
-# TODO: attention, l'étape de filtration sur les métadonnées ne se fait pas bien en fonction de la matrice demandée.
 samples = [sample for sample in get_samples_from_vcf(
     vcf_file) if sum(metadata["ID_DNA_RAD"].str.contains(sample)) > 0]
-
 # Open the output file to write line by line
-tmp_out_file = open(temp_file, "w")
+tmp_out_file = open(temp_file, "w+")
 # Add the name of the samples
 tmp_out_file.write("\t".join(samples) + "\n")
 
 # Get the indices of the samples in the samples of the vcf
 sample_indices = get_indices_samples_vcf(vcf_file, samples)
+
 # Iterate over the lines of the vcf and print them to the file
 for rec in vcf_file.fetch():
 

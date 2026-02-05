@@ -21,6 +21,7 @@ done
 
 # Get the name of the input file
 infile="${temp_folder}${SAMPLES}_genotypes.txt"
+
 # Count the number of columns
 cols=`head -n1 "${infile}" | wc -w`
 # Iterate over columns and transform them into lines
@@ -29,3 +30,4 @@ for (( i=1; i<="${cols}"; i++)); do
 done
 
 echo -e "\n" >> "${output_file}"
+unset SAMPLES

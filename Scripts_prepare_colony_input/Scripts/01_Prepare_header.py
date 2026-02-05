@@ -1,5 +1,4 @@
 #!/bin/python3
-# TODO: the number of offspring in the sample and the mean number of offspring per mother and father do not use the vcf input file, to tune
 ###############################
 ########## Libraries ##########
 ###############################
@@ -7,6 +6,30 @@ import pandas as pd
 import yaml
 import pysam as vcf
 print("Preparing header")
+
+###############################
+###### Useful functions #######
+###############################
+
+
+def get_samples_from_vcf(vcf_file):
+    i = 1
+    for rec in vcf_file.fetch():
+        if i > 1:
+            break
+        samples = rec.samples
+        i += 1
+    return (list(samples))
+
+
+def get_mean_sibship_parents(all_sibships_parents, sex="F"):
+    parent_sibship = round(
+        all_sibships_parents[(all_sibships_parents["sex"]
+                              == sex)]["count"].mean(),
+        ndigits=1
+    )
+    return (parent_sibship)
+
 
 ###############################
 ###### Import variables #######
@@ -20,9 +43,15 @@ with open("Data/Input.yaml", "r") as info:
 ###############################
 # Import the vcf file
 vcf_file = vcf.VariantFile(config_file["Input_file"])
+samples_from_vcf = get_samples_from_vcf(vcf_file)
 
 # Import metadata
 metadata = pd.read_csv(config_file["Metadata"], sep="\t", header=0)
+# Filter the metadata to keep only the individuals that are in the vcf
+metadata = metadata[metadata.ID_DNA_RAD.isin(samples_from_vcf)]
+
+details_parents_in_aquarium = pd.read_csv("/".join(config_file["Metadata"].split("/")[:-1]) + "/" + "Details_parents_in_aquarium.tsv",
+                                          sep="\t", header=0)
 
 ###############################
 ####### Compute stats #########
@@ -30,8 +59,13 @@ metadata = pd.read_csv(config_file["Metadata"], sep="\t", header=0)
 # Get the number of offsrping
 nb_offspring = len(metadata.query("Family_level == 'offspring'").index)
 
-# Get the mean number of offspring per female
-nb_offspring_per_female = round(metadata.groupby("Mother_ID").size().mean(), 2)
+# Get the mean sibship sizes for males and females
+all_sibships_parents = details_parents_in_aquarium.groupby(["sex", "GM"])[
+    "GM"].value_counts().reset_index()
+maternal_sibship = get_mean_sibship_parents(
+    all_sibships_parents=all_sibships_parents, sex="F")
+paternal_sibship = get_mean_sibship_parents(
+    all_sibships_parents=all_sibships_parents, sex="M")
 
 # Get the number of loci
 nb_loci = 0
@@ -44,7 +78,7 @@ for rec in vcf_file.fetch():
 ###############################
 #### Prepare output header ####
 ###############################
-with open("".join([config_file["Outfolder"], "colony.dat"]), "w") as f:
+with open("".join([config_file["Outfolder"], "colony.dat"]), "w+") as f:
     f.write(f"""'{config_file["Output_name"]}' \t !Dataset name
 '{config_file["Output_name"]}' \t !Output file name
 {nb_offspring} \t ! Number of offspring in the sample
@@ -57,7 +91,7 @@ with open("".join([config_file["Outfolder"], "colony.dat"]), "w") as f:
 {config_file["Gamy"][0]}  {config_file["Gamy"][1]} \t ! 0/1=Polygamy/Monogamy for males & females
 {config_file["Clone"]} \t ! 0/1=Clone inference =No/Yes
 {config_file["Sibship_size_scaling"]} \t ! 0/1=Full sibship size scaling =No/Yes
-{config_file["Sibship_size_prior"]} {nb_offspring_per_female} {nb_offspring_per_female} \t ! 0,1,2,3=No,weak,medium,strong sibship size prior; mean paternal & meteral sibship size
+{config_file["Sibship_size_prior"]} {paternal_sibship} {maternal_sibship} \t ! 0,1,2,3=No,weak,medium,strong sibship size prior; mean paternal & maternal sibship size
 {config_file["Known_allele_freq"]} \t ! 0/1=Unknown/Known population allele frequency
 {" ".join([str(x) for x in nb_alleles_per_loc])} \t !Number of alleles per locus
 {config_file["Nb_runs"]} \t ! Number of runs

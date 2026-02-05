@@ -1,8 +1,8 @@
 ---
-Input_file: "/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/Data/test_colony.vcf"      # Where is located the input file
+Input_file: "/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/Information_vcf/test_colony.vcf"      # Where is located the input file
 Metadata: "/shared/projects/sexisol/input/Basile/Multiple_choice_experiment/Data/metadata.tsv"                                                              # Where is located the metadata
 Output_name: "Multiple_choice_exp"                                                                                                                          # Name of the dataset and how to name the output file of colony
-Outfolder: "/shared/home/bpajot/Jaera/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/Colony_input/"                                                      # Where to write the colony input file       
+Outfolder: "/shared/home/bpajot/Jaera/script/Basile/Multiple_choice_experiment/Scripts_prepare_colony_input/"                                                      # Where to write the colony input file       
 Tmp_dir: "/shared/scratch/sexisol/bpajot/tmp/Colony_input/"
 Random_seed: 1234
 Update_allele_freq: 1                                                                                                                                       # 0/1 = Not update/update alle frequency
@@ -11,7 +11,7 @@ Inbreeding: 0                                                                   
 Ploidy: 0                                                                                                                                                   # 0/1=Diploid species/HaploDiploid species
 Gamy: [0, 0]                                                                                                                                                # 0/1=Polygamy/Monogamy for males & females
 Clone: 0                                                                                                                                                    # 0/1=Clone inference =No/Yes
-Sibship_size_scaling: 1                                                                                                                                     # 0/1=Full sibship size scaling =No/Yes
+Sibship_size_scaling: 0                                                                                                                                     # 0/1=Full sibship size scaling =No/Yes
 Sibship_size_prior: 1                                                                                                                                       # 0,1,2,3=No,weak,medium,strong sibship size prior
 Known_allele_freq: 0                                                                                                                                        # 0/1=Unknown/Known population allele frequency
 Nb_runs: 1                                                                                                                                                  # Number of runs
@@ -21,3 +21,4 @@ Monitor_interval_in_iterate_number_in_second: 100000                            
 Windows_verion: 0                                                                                                                                           # 0/1 = non-Windows/Windows version
 Fulllikelihood: 1                                                                                                                                           # Fulllikelihood
 Precision_for_likelihood: 3                                                                                                                                 # 1/2/3=low/medium/high Precision for Fulllikelihood
+Paternity_and_maternity_exclusion_threshold: 0                                                                                                              # Number of mismatches allowed for a known father/mother-offspring dyad.

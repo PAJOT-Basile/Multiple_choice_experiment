@@ -2,7 +2,7 @@
 ########## Libraries #########
 ##############################
 suppressMessages(if (!require("pacman")) install.packages("pacman"))
-libraries <- c("tidyverse", "vcfR", "adegenet", "yaml")
+libraries <- c("tidyverse", "vcfR", "adegenet", "yaml", "parallel")
 suppressMessages(pacman::p_load(char = libraries, character.only = TRUE))
 
 cat("Making table marker\n")
@@ -72,12 +72,14 @@ suppressWarnings(SNPs_analysis <- data@tab %>%
   select(contains(".0"), sample) %>% 
   mutate(Sample_ID = str_split_fixed(sample, "r", 2)[, 1]) %>% 
   select(-sample))
-  
-suppressWarnings(Get_Error_Rate_Per_SNP(SNPs_analysis) %>%
+
+Error_rate <- Get_Error_Rate_Per_SNP(SNPs_analysis)
+suppressWarnings( Error_rate %>%
   as_tibble() %>%
   rename(Error = value) %>%
-  mutate(Position = names(Error_rate)) %>%
-  mutate(Position = str_remove_all(value, "\\+\\.0|\\-\\.0"),
+  mutate(Position = names(Error_rate),
+         Error = round(Error, digits = 4)) %>%
+  mutate(Position = str_remove_all(Position, "\\+\\.0|\\-\\.0"),
          marker_type = 0, dropout_rate = 0) %>%
   relocate(Position, marker_type, dropout_rate, Error) %>%
   t() %>%
