@@ -92,7 +92,7 @@ Get_Error_Rate_Per_SNP <- function(df){
 ##############################
 
 # Thinned vcf
-data <- read.vcfR("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/thinned_whithout_unwanted_snps_and_without_missing_indivs.vcf",
+data <- read.vcfR("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/thinned_whithout_unwanted_snps_no_error_and_good_indivs.vcf",
                   verbose = FALSE) %>% 
   vcfR2genind()
 
@@ -108,11 +108,11 @@ order_loci <- data@tab %>%
   separate_wider_delim(value, names = c("Locus", "Col", "Allele"), ":")
 
 # Get the sizes of the chromosomes and compute where the next chromosome will start on the manhattan plot
-chromosome_sizes <- read.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/Data/chromosome_sizes.tsv",
+chromosome_sizes <- read.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/Information_vcf/chromosome_sizes.tsv",
                                sep = "\t", header = TRUE)
 
 # Import the sumstats of the thinned vcf (locus, chromosome, position, ...)
-summary_stats <- read.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/Data/sumstats_thinned_50k.tsv",
+summary_stats <- read.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/Information_vcf/sumstats_thinned_50k.tsv",
                             sep = "\t", header = TRUE)
 
 ##############################
@@ -133,7 +133,7 @@ Error_rate <- Get_Error_Rate_Per_SNP(SNPs_analysis) %>%
   mutate(Position = names(Error_rate)) %>%
   relocate(Position)
 
-Error_rate %>% 
+(Error_rate %>% 
   separate_wider_delim(Position, names = c("Locus", "Col", "Allele"), ":") %>% 
   filter(grepl("0", Allele)) %>% 
   mutate(Locus = Locus %>% as.integer,
@@ -141,11 +141,12 @@ Error_rate %>%
          Col = Col %>% as.integer) %>% 
   left_join(summary_stats, by = c("Locus", "Col", "Locus_name")) %>% 
   ggplot(aes(x = BP_cumul, y = Error)) +
-  geom_point()
+  geom_point()) %>%
+  ggsave(plot = ., "~/Rplot.png", units = "px", height = 1200, width = 1200, scale = 3)
 
-Error_rate %>%
-  write.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/Data/Error_rate_per_SNP.tsv",
-              col.names = TRUE, row.names = FALSE, quote = FALSE)
+# Error_rate %>%
+#   write.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/Data/Error_rate_per_SNP.tsv",
+#               col.names = TRUE, row.names = FALSE, quote = FALSE)
 
 data@tab %>%
   colnames() %>% 
@@ -162,3 +163,25 @@ data@tab %>%
   relocate(toto) %>% 
   write.table(paste0(config_file$Outfolder, "colony.dat"),
               sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = TRUE)
+
+
+# Look at the relatedness between parents
+relatedness_females_forsmani <- read.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/relatedness_parents/females_forsmani.relatedness",
+                                     sep = "\t", header = TRUE)
+
+indivs_in_list <- c("E4893", "E4903", "E4906", "E4910", "E4913",
+                    "E4937", "E4938", "E4946", "E4948", "E4961")
+
+toto <- c("E4893", "E4903", "E4906", "E4960", "E4913",
+          "E4937", "E4938", "E4946", "E4948", "E4961")
+
+indivs_left <- c("E4894", "E4895", "E4924", "E4905", "E4908", "E4912", "E4914", "E4917",
+                 "E4918", "E4919", "E4920", "E4921", "E4922", "E4923", "E4925", "E4928",
+                 "E4930", "E4931", "E4934", "E4935", "E4940", "E4942", "E4947", "E4949",
+                 "E4953", "E4958", "E4964")
+
+(relatedness_females_forsmani  %>% 
+  filter(grepl(paste(toto, collapse = "|"), INDV1) & grepl(paste(indivs_left, collapse = "|"), INDV2)) %>% 
+  ggplot(aes(x = INDV1, y = INDV2, fill = RELATEDNESS_PHI)) +
+  geom_tile())  %>% 
+  ggsave(plot = ., filename = "~/Rplot.png", units = "px", height = 1200, width = 1200, scale = 2)

@@ -87,5 +87,5 @@ suppressWarnings( Error_rate %>%
   mutate(toto = "",
   tata = c("!Marker names", "!Marker types, 0/1 = codominant/dominant", "!Allelic dropout rate", "!false allele rate")) %>% 
   relocate(toto) %>% 
-  write.table(paste0(config_file$Outfolder, "colony.dat"),
+  write.table(paste0(config_file$Outfolder, "colony2.dat"),
               sep = "\t", col.names = FALSE, row.names = FALSE, quote = FALSE, append = TRUE))

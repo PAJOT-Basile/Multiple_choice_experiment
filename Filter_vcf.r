@@ -210,7 +210,7 @@ missing_values_per_indiv <- data_no_err@tab %>%
   as_tibble %>% 
   rename(Nb_missing_values = value) %>% 
   mutate(Indiv = rownames(data_no_err@tab),
-         Proportion_missing_per_indiv = Nb_missing_values / ncol(data@tab)) %>% 
+         Proportion_missing_per_indiv = Nb_missing_values / ncol(data_no_err@tab)) %>% 
   relocate(Indiv)
 
 missing_values_per_indiv %>% 

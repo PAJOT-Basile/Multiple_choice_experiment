@@ -78,28 +78,41 @@ for rec in vcf_file.fetch():
 ###############################
 #### Prepare output header ####
 ###############################
-with open("".join([config_file["Outfolder"], "colony.dat"]), "w+") as f:
-    f.write(f"""'{config_file["Output_name"]}' \t !Dataset name
-'{config_file["Output_name"]}' \t !Output file name
-{nb_offspring} \t ! Number of offspring in the sample
-{nb_loci} \t ! Number of loci
-{config_file["Random_seed"]}                   ! Seed for random number generator
-{config_file["Update_allele_freq"]} \t ! 0/1=Not updating/updating allele frequency
-{config_file["Dioecious_or_monoecious"]} \t ! 2/1=Dioecious/Monoecious species
-{config_file["Inbreeding"]} \t ! 0/1=No inbreeding/inbreeding
-{config_file["Ploidy"]} \t ! 0/1=Diploid species/HaploDiploid species
-{config_file["Gamy"][0]}  {config_file["Gamy"][1]} \t ! 0/1=Polygamy/Monogamy for males & females
-{config_file["Clone"]} \t ! 0/1=Clone inference =No/Yes
-{config_file["Sibship_size_scaling"]} \t ! 0/1=Full sibship size scaling =No/Yes
-{config_file["Sibship_size_prior"]} {paternal_sibship} {maternal_sibship} \t ! 0,1,2,3=No,weak,medium,strong sibship size prior; mean paternal & maternal sibship size
-{config_file["Known_allele_freq"]} \t ! 0/1=Unknown/Known population allele frequency
-{" ".join([str(x) for x in nb_alleles_per_loc])} \t !Number of alleles per locus
-{config_file["Nb_runs"]} \t ! Number of runs
-{config_file["Length_run"]} \t ! Length of run
-{config_file["Monitor_method_by_iterate_number_in_second"]} \t ! 0/1=Monitor method by Iterate#/Time in second
-{config_file["Monitor_interval_in_iterate_number_in_second"]} \t ! Monitor interval in Iterate# / in seconds
-{config_file["Windows_verion"]} \t ! non-Windows version
-{config_file["Fulllikelihood"]} \t ! Fulllikelihood
-{config_file["Precision_for_likelihood"]} \t ! 1/2/3=low/medium/high Precision for Fulllikelihood
+# Store the text to write in a variables so it can be concatenated
+start_text_to_write = f"""'{config_file["Output_name"]}'  !Dataset name
+'{config_file["Output_name"]}'  !Output file name
+{nb_offspring}  ! Number of offspring in the sample
+{nb_loci}  ! Number of loci
+{config_file["Random_seed"]}  ! Seed for random number generator
+{config_file["Update_allele_freq"]}  ! 0/1=Not updating/updating allele frequency
+{config_file["Dioecious_or_monoecious"]}  ! 2/1=Dioecious/Monoecious species
+{config_file["Inbreeding"]}  ! 0/1=No inbreeding/inbreeding
+{config_file["Ploidy"]}  ! 0/1=Diploid species/HaploDiploid species
+{config_file["Gamy"][0]}  {config_file["Gamy"][1]}  ! 0/1=Polygamy/Monogamy for males & females
+{config_file["Clone"]}  ! 0/1=Clone inference =No/Yes
+{config_file["Sibship_size_scaling"]}  ! 0/1=Full sibship size scaling =No/Yes
+{config_file["Sibship_size_prior"]} {paternal_sibship} {maternal_sibship}  ! 0,1,2,3=No,weak,medium,strong sibship size prior; mean paternal & maternal sibship size
+{config_file["Known_allele_freq"]}  ! 0/1=Unknown/Known population allele frequency"""
 
-""")
+if config_file["Known_allele_freq"] ==0:
+    text_allele_nb = ""
+else:
+    text_allele_nb = f"""{" ".join([str(x) for x in nb_alleles_per_loc])}  !Number of alleles per locus"""
+
+end_text_to_write = f"""
+{config_file["Nb_runs"]}  ! Number of runs
+{config_file["Length_run"]}  ! Length of run
+{config_file["Monitor_method_by_iterate_number_or_time_in_second"]}  ! 0/1=Monitor method by Iterate#/Time in second
+{config_file["Monitor_interval_in_iterate_number_in_second"]}  ! Monitor interval in Iterate# / in seconds
+{config_file["Windows_verion"]}  ! non-Windows version
+{config_file["Fulllikelihood"]}  ! Fulllikelihood
+{config_file["Precision_for_likelihood"]}  ! 1/2/3=low/medium/high Precision for Fulllikelihood
+
+"""
+
+text_to_write =  start_text_to_write + text_allele_nb + end_text_to_write
+
+
+# Write it to output file
+with open("".join([config_file["Outfolder"], "colony2.dat"]), "w+") as f:
+    f.write(text_to_write)

@@ -4,7 +4,7 @@
 #SBATCH --account=sexisol
 #SBATCH --job-name=Vcf2Colony
 #SBATCH --mem=50G
-#SBATCH --cpus-per-task=1
+#SBATCH --cpus-per-task=20
 
 # Create the conda environment
 if [[ ! -d ./Data/envs/Vcf2Colony/ ]]; then

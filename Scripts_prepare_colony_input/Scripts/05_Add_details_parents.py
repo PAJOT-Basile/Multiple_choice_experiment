@@ -34,7 +34,7 @@ def potential_parents(samples, metadata, sex):
 with open("Data/Input.yaml", "r") as info:
     config_file = yaml.safe_load(info)
 
-outfile = "".join([config_file["Outfolder"], "colony.dat"])
+outfile = "".join([config_file["Outfolder"], "colony2.dat"])
 ###############################
 ######## Import data ##########
 ###############################

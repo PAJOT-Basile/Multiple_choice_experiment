@@ -56,7 +56,7 @@ def get_mother_offspring_dyads(mother_ID, metadata):
 with open("Data/Input.yaml", "r") as info:
     config_file = yaml.safe_load(info)
 
-outfile = "".join([config_file["Outfolder"], "colony.dat"])
+outfile = "".join([config_file["Outfolder"], "colony2.dat"])
 ###############################
 ######## Import data ##########
 ###############################
