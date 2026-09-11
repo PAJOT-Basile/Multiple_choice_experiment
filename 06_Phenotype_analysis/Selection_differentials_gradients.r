@@ -1,7 +1,7 @@
 ########################################
 ############## Libraries ###############
 ########################################
-libraries <- c("tidyverse", "ggh4x", "parallel", "scales", "ggpubr", "stringi", "rgl")
+libraries <- c("tidyverse", "ggh4x", "parallel", "scales", "ggpubr", "stringi")
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(char = libraries, character.only = TRUE)
 
