@@ -47,3 +47,12 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# Snakemake files
+01_Raw_data_processing/*/.snakemake/
+01_Raw_data_processing/*/logs/
+01_Raw_data_processing/*/slurm*
+01_Raw_data_processing/*/C*
+
+# Vcf2colony
+03_Prepare_Colony_input/

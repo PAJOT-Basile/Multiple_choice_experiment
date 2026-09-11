@@ -1,0 +1,339 @@
+# ------------------------------------------------------------------
+#                   Basile Pajot, 2026
+#                   baspajot@gmail.com
+#     Script to process short-read data from selected samples on ddRAD data
+# ------------------------------------------------------------------
+######################## Import custom functions ###############################
+from Scripts_snk.snakemake_functions import *
+from math import log
+from snakemake.io import InputFiles
+
+######################## Import values from the configuration file  ###############################
+# Inputs
+raw_data_path = config["raw_data_path"]
+Reference_genome = config["Reference_genome"]
+working_directory = config["Working_directory"]
+
+# Conda environment
+conda_path = working_directory + "Configuration_files/envs/"
+
+# Temporary paths
+tmp_path = config["tmp_path"]
+
+# Output path
+output_path = config["output_path"]
+
+GLOBAL_WILDCARDS = glob_wildcards(raw_data_path + "{sample}.{read}.fq.gz")
+SAMPLES = list(set(GLOBAL_WILDCARDS.sample))
+READS = list(set(GLOBAL_WILDCARDS.read))
+
+######################## Cut chromosomes  ###############################
+# Here, we cut the chromosomes into smaller regions to parallelise the jobs on these smaller regions
+# So, we defined a bin size in the configuration file, that we import here and then, we cut the chromosomes
+# into smaller regions to be used here
+# bin_size = config["bin_size"]
+# REGIONS = get_chromosome_positions_breaks(Reference_genome, bin_size=bin_size)
+
+######################## Loop variables  ###############################
+# These variables will be used to run several identical rules at different
+# moments of the pipeline
+STEPS = ["1_Raw", "2_Fastp"]
+
+######################## Memory allocation functions  ###############################
+######################## Get the input file size  ###############################
+def get_input_file_size(wildcards, input):
+    return input.size_mb
+
+
+######################## Double memory  ###############################
+def double_mem(attempt):
+    return 2 ** (attempt - 1)
+
+
+######################## FastP  ###############################
+def get_mem_mb_fastp_01(wildcards, input, attempt):
+    input_file_size = get_input_file_size(
+        wildcards, InputFiles([x for x in input if "R2" in x])
+    )
+    base_mem = 116 * log(input_file_size) + 4209
+    return base_mem * double_mem(attempt)
+
+
+######################## FastQC  ###############################
+def get_mem_mb_fastqc_02(wildcards, input, attempt):
+    input_file_size = get_input_file_size(
+        wildcards, InputFiles([x for x in input if "R2" in x])
+    )
+    base_mem = 0.001 * input_file_size + 2950
+    return base_mem * double_mem(attempt)
+
+
+######################## MultiQC  ###############################
+def get_mem_mb_multiqc_03(wildcards, input, attempt):
+    nb_individuals = len(InputFiles([x for x in input if "zip" in x])) / 2
+    base_mem = nb_individuals * 27 + 765
+    return base_mem * double_mem(attempt)
+
+
+######################## BWA MEM  ###############################
+def get_mem_mb_bwa_05(wildcards, input, attempt):
+    input_file_size = get_input_file_size(
+        wildcards, InputFiles([x for x in input if "R2" in x])
+    )
+    with open(str([x for x in input if "html" in x][0])) as f:
+        lengths = [
+            line.split(">")[4].split("bp, ")
+            for line in f.readlines()
+            if "mean length after filtering" in line
+        ][0]
+    Length_R1 = int(lengths[0])
+    Length_R2 = int(lengths[1].split("bp")[0])
+    with open(str([x for x in input if "html" in x][0])) as f:
+        Tot_bases = float(
+            [
+                line.split(">")[4].split(" ")[0]
+                for line in f.readlines()
+                if "total bases" in line
+            ][1]
+        )
+    Mean_length = (Length_R1 + Length_R2) / 2
+    base_mem = 30 * Tot_bases + 47 * Mean_length + 8350
+    return base_mem * double_mem(attempt)
+
+
+######################## Samtools sort  ###############################
+def get_mem_mb_sort_08(wildcards, input, attempt):
+    input_file_size = get_input_file_size(
+        wildcards, InputFiles([x for x in input if "bam" in x])
+    )
+    with open(str([x for x in input if "html" in x][0])) as f:
+        Tot_reads = float(
+            [
+                line.split(">")[4].split(" M")[0]
+                for line in f.readlines()
+                if "total reads" in line
+            ][1]
+        )
+    base_mem = input_file_size * 0.001 + 2 * Tot_reads + 13500
+    return base_mem * double_mem(attempt)
+
+
+######################## Index flagstat  ###############################
+def get_mem_mb_flagstat_10(wildcards, input, attempt):
+    input_file_size = get_input_file_size(
+        wildcards, InputFiles([x for x in input if "bam" in x])
+    )
+    with open(str([x for x in input if "html" in x][0])) as f:
+        lengths = [
+            line.split(">")[4].split("bp, ")
+            for line in f.readlines()
+            if "mean length after filtering" in line
+        ][0]
+    Length_R1 = int(lengths[0])
+    Length_R2 = int(lengths[1].split("bp")[0])
+    Mean_length = (Length_R1 + Length_R2) / 2
+    base_mem = 0.01 * input_file_size + 2 * Mean_length + 600
+    return base_mem * double_mem(attempt)
+######################## RULES  ###############################
+######################## rule all  ###############################
+# Allows to check for input and outputs
+rule all:
+    input:
+        expand(output_path + "01_Fastp/html/{sample}.html", sample=SAMPLES),
+        expand(output_path + "01_Fastp/json/{sample}.json", sample=SAMPLES),
+        expand(
+            output_path + "02_Fastqc_out/{step}/{sample}.{read}_fastqc.html",
+            step=STEPS,
+            sample=SAMPLES,
+            read=READS,
+        ),
+        expand(
+            output_path + "03_MultiQC/Quality_results_on_{step}.html",
+            step=[this_step(step) for step in STEPS],
+        ),
+        expand(output_path + "05_Sorted_genomes/{sample}.bam", sample=SAMPLES),
+        expand(output_path + "07_Flagstat_reports/{sample}.flagstat", sample=SAMPLES),
+        output_path + "08_Calling/ddRAD_multiple_choice_experiment/populations.snps.vcf",
+        output_path + "ddRAD_multiple_choice_experiment.txt"
+####################### rule FastP  ###############################
+rule N01_FastP:
+    input:
+        raw_R1=raw_data_path + "{sample}.R1.fq.gz",
+        raw_R2=raw_data_path + "{sample}.R2.fq.gz",
+    output:
+        fastp_R1=temp(tmp_path + "01_Fastp/{sample}.R1.fq.gz"),
+        fastp_R2=temp(tmp_path + "01_Fastp/{sample}.R2.fq.gz"),
+        html=output_path + "01_Fastp/html/{sample}.html",
+        json=output_path + "01_Fastp/json/{sample}.json",
+    conda:
+        conda_path + "N01_FastP.yaml"
+    resources:
+        mem_mb=get_mem_mb_fastp_01,
+    threads: 4
+    log:
+        working_directory + "logs/N01_FastP/N01_FastP-{sample}.out",
+    message:
+        "FastP on {wildcards.sample}."
+    shell:
+        """
+            fastp -i {input.raw_R1:q} -I {input.raw_R2:q} -o {output.fastp_R1:q} -O {output.fastp_R2:q} --thread {threads} -g -c -y 30 --html {output.html:q} --json {output.json:q} 2> {log:q}
+        """
+####################### Function to create a rule for the fastqc on different steps  ###############################
+def rule_fastqc(step, raw_data_path, tmp_path):
+    rule:
+        name: f"N02.{step.split('_')[0]}_FastQC_on_{this_step(step)}"
+        input:
+            lambda wildcards: input_fastqc(step, raw_data_path, tmp_path) + "{sample}.{read}.fq.gz"
+        output:
+            zip_out = temp(output_path + "02_Fastqc_out/" + step + "/{sample}.{read}_fastqc.zip"),
+            html_out = output_path + "02_Fastqc_out/" + step + "/{sample}.{read}_fastqc.html"
+        params:
+            outdir = output_path + "02_Fastqc_out/" + step + "/",
+        conda: conda_path + "N02_FastQC.yaml"
+        resources:
+            mem_mb = get_mem_mb_fastqc_02
+        log:
+            working_directory + "logs/N02_FastQC/" + step + "/N02_FastQC-{sample}-{read}.out"
+        message:
+            "FastQC on " + f"{this_step(step)}" + " data of sample {wildcards.sample}.{wildcards.read}"
+        shell:
+            """
+                fastqc {input:q} -o {params.outdir:q} 2> {log:q}
+            """
+####################### Function to create a rule for the multiqc on different steps  ###############################
+def rule_multiqc(step, tmp_path, output_path):
+    rule:
+        name: f"N03.{step.split('_')[0]}_MultiQC_on_{this_step(step)}"
+        input:
+            zip = lambda wildcards: expand(output_path + "02_Fastqc_out/" + step + "/{sample}.{read}_fastqc.{extension}", sample = SAMPLES, read = READS, extension=["zip", "html"])
+        output:
+            output_path + "03_MultiQC/Quality_results_on_" + this_step(step) + ".html"
+        params:
+            INDIR = output_path + "02_Fastqc_out/" + step + "/",
+            OUTDIR = output_path + "03_MultiQC/",
+            OUTNAME = output_path + "03_MultiQC/Quality_results_on_" + this_step(step),
+        conda: conda_path + "N03_MultiQC.yaml"
+        resources:
+            mem_mb = get_mem_mb_multiqc_03
+        log:
+            working_directory + "logs/N03_MultiQC/N03_MultiQC-" + this_step(step) + ".out"
+        message:
+            "MultiQC on " + f"{this_step(step)} data"
+        shell:
+            """
+                multiqc {params.INDIR:q} -o {params.OUTDIR:q} -n {params.OUTNAME:q} --force 2> {log:q}
+            """
+####################### Run the created functions on the raw and trimmed data  ###############################
+for step in STEPS:
+    rule_fastqc(step, raw_data_path, tmp_path)
+    rule_multiqc(step, tmp_path, output_path)
+####################### Map on the reference genome  ###############################
+rule N04_Map_ref_genome:
+    input:
+        trimmed_R1 = rules.N01_FastP.output.fastp_R1,
+        trimmed_R2 = rules.N01_FastP.output.fastp_R2,
+        ref_genome = Reference_genome,
+        memory = rules.N01_FastP.output.html
+    output:
+        temp(tmp_path + "04_Mapped_genomes/{sample}.bam")
+    params:
+        tmp_path = tmp_path,
+    conda: conda_path + "N04_Map_ref_genome.yaml"
+    resources:
+        mem_mb = get_mem_mb_bwa_05,
+    threads: 10
+    log:
+        working_directory + "logs/N04_Map_ref_genome/N04_Map_ref_genome_{sample}.out"
+    message:
+        "Mapping (bwa-mem) {wildcards.sample} on the reference genome"
+    shell:
+        r"""
+            (bwa mem -M -t {threads} -R '@RG\tID:1\tSM:{wildcards.sample}\tPL:ddRAD\tLB:lib\tPU:multiple_choice_exp' {input.ref_genome:q} {input.trimmed_R1:q} {input.trimmed_R2:q} | samtools view -C -T {input.ref_genome:q} > {output:q}) 2> {log:q}
+        """
+##################### Sort the BAM files  ###############################
+rule N05_Sort_BAM:
+    input:
+        in_file = rules.N04_Map_ref_genome.output,
+        memory = rules.N01_FastP.output.html
+    output:
+        output_path + "05_Sorted_genomes/{sample}.bam"
+    params:
+        tmp_path = tmp_path,
+    conda: conda_path + "N05_Sort_BAM.yaml"
+    resources:
+        mem_mb = get_mem_mb_sort_08
+    threads: 10
+    log:
+        working_directory + "logs/N05_Sort_BAM/N05_Sort_BAM_{sample}.out"
+    message:
+        "Sorting by position {wildcards.sample}"
+    shell:
+        """
+            samtools sort -@ {threads} {input.in_file:q} -O BAM -o {output:q} -T {params.tmp_path:q} 2> {log:q}
+        """
+##################### Index the BAM file and do some stats  ###############################
+rule N06_Index_Flagstat:
+    input:
+        in_file = rules.N05_Sort_BAM.output,
+        memory = rules.N01_FastP.output.html
+    output:
+        index = output_path + "05_Sorted_genomes/{sample}.bam.bai",
+        flagstat = output_path + "07_Flagstat_reports/{sample}.flagstat"
+    conda: conda_path + "N06_Index_Flagstat.yaml"
+    resources:
+        mem_mb = get_mem_mb_flagstat_10
+    message:
+        "Indexing and making stats on {wildcards.sample}"
+    log:
+        working_directory + "logs/N06_Index_Flagstat/N06_Flagstat_{sample}.out"
+    shell:
+        """
+            (samtools index -@ {threads} -b {input.in_file:q} > {output.index:q}) 2> {log:q}
+            (samtools flagstat -@ {threads} {input.in_file:q} > {output.flagstat:q}) 2> {log:q}
+        """
+######################## Make a list of the BAM files  ###############################
+rule N07_List_Bam_files:
+    input:
+        bam_files = expand(output_path + "05_Sorted_genomes/{sample}.bam", sample=SAMPLES),
+        timing = expand(output_path + "05_Sorted_genomes/{sample}.bam.bai", sample=SAMPLES)
+    output:
+        output_path + "ddRAD_multiple_choice_experiment.txt"
+    params:
+        pop_map_dir = output_path + "05_Sorted_genomes/"
+    message:
+        "Making a list of the BAM files"
+    log:
+        working_directory + "logs/N07_List_Bam_files/N07_List_files.out"
+    shell:
+        """
+            (ls -d {params.pop_map_dir:q}* | grep -v ".bai" | rev | cut -d"/" -f1 | rev | cut -d"." -f1 | sed -re "s/$/\\tMultiple_choice_experiment/g" > {output:q}) 2> {log:q}
+        """
+######################## SNP calling  ###############################
+rule N08_SNP_calling:
+    input:
+        pop_map=rules.N07_List_Bam_files.output,
+        bam_indices=expand(
+            output_path + "05_Sorted_genomes/{sample}.bam.bai", sample=SAMPLES
+        ),
+        bam_files=expand(
+            output_path + "05_Sorted_genomes/{sample}.bam", sample=SAMPLES
+        ),
+    output:
+        vcf=output_path + "08_Calling/ddRAD_multiple_choice_experiment/populations.snps.vcf",
+    params:
+        input_dir=output_path + "05_Sorted_genomes/",
+        output_dir=output_path + "08_Calling/ddRAD_multiple_choice_experiment/",
+    threads: 16
+    conda:
+        conda_path + "N08_SNP_calling.yaml"
+    resources:
+        mem_mb=32000
+    log:
+        working_directory + "logs/N09_SNP_calling/N09_SNP_calling.out"
+    message:
+        "Stacks SNP calling"
+    shell:
+        """
+            param=$(cut -f 2 {input.pop_map} |sort | uniq |wc -l) 2> {log:q}
+            ref_map.pl --samples {params.input_dir} --popmap {input.pop_map} --out-path {params.output_dir} -T {threads} -X "populations: -p ${{param}} -r 0.80 --max-obs-het 0.8 --vcf" 2> {log:q}
+        """

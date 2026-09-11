@@ -1,0 +1,77 @@
+# import custom functions
+from Scripts_snk.custom_functions import *
+
+# Get all the individuals, indexes, and libraries
+all_indivs, all_samples, all_libs_indexes = get_list_individuals()
+projects_and_lanes = get_projects_lanes()
+
+# Get the variable names
+infolder = "/shared/projects/sexisol/archive/25_ddRAD_novogene/"
+outfolder = "/shared/projects/sexisol/archive/25_ddRAD_novogene_demultiplexed/"
+working_directory = "/shared/projects/sexisol/script/Basile/Demultiplexage/"
+
+
+rule all:
+    input:
+        # expand(
+        #     working_directory + "barcodes/barcodes_{lib_index}.tsv",
+        #     lib_index=all_libs_indexes,
+        # ),
+        expand(
+            outfolder + "{projects_and_lanes}.discards",
+            projects_and_lanes=projects_and_lanes,
+        ),
+        expand(outfolder + "{indivs}.{read}.fq.gz", indivs=all_samples, read=["1", "2"]),
+
+
+rule demultiplex:
+    input:
+        barcode=working_directory
+        + "barcodes/barcodes_{lib_index,[0-9]_ind[0-9]{2}}-{lane}.tsv",
+        r1=infolder
+        + "Jaera_{lib_index,[0-9]_ind[0-9]{2}}/Jaera_{lib_index,[0-9]_ind[0-9]{2}}_{project}_{lane}_1.fq.gz",
+        r2=infolder
+        + "Jaera_{lib_index,[0-9]_ind[0-9]{2}}/Jaera_{lib_index,[0-9]_ind[0-9]{2}}_{project}_{lane}_2.fq.gz",
+    output:
+        outfolder
+        + "Jaera_{lib_index,[0-9]_ind[0-9]{2}}_{project}_{lane}_1.fq.gz.discards",
+        outfolder
+        + "Jaera_{lib_index,[0-9]_ind[0-9]{2}}_{project}_{lane}_2.fq.gz.discards",
+        log=outfolder
+        + "process_radtags.Jaera_{lib_index,[0-9]_ind[0-9]{2}}_{project}_{lane}.log",
+    params:
+        outfolder=outfolder,
+    log:
+        working_directory
+        + "logs/demultiplex/log_{lib_index,[0-9]_ind[0-9]{2}}_{project}_{lane}.log",
+    threads: 1
+    shell:
+        """
+            process_radtags -1 {input.r1:q} -2 {input.r2:q} -b {input.barcode:q} -o {params.outfolder:q} --inline_null -c -q -r -D --renz_1 pstI --renz_2 mseI --adapter_1 TAAGATCGGAAGAGCACACGTCTGAACTCCAGTCAC --adapter_2 AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT --retain_header --adapter_mm 2 2> {log}
+            mv {params.outfolder:q}/process_radtags.Jaera_{wildcarsds.lib_index:q}.log {output.log:q} 2> {log}
+        """
+
+
+rule concat_lanes:
+    input:
+        r1=expand(
+            outfolder + "{indiv}_{lane}.1.fq.gz",
+            lane=lambda wildcards: get_lane(wildcards, all_indivs),
+            allow_missing=True,
+        ),
+        r2=expand(
+            outfolder + "{indiv}_{lane}.2.fq.gz",
+            lane=lambda wildcards: get_lane(wildcards, all_indivs),
+            allow_missing=True,
+        ),
+    output:
+        r1=outfolder + "{indiv}.R1.fq.gz",
+        r2=outfolder + "{indiv}.R2.fq.gz",
+    threads: 1
+    log:
+        working_directory + "logs/concat_lanes/{indiv}.log",
+    shell:
+        """
+            zcat {input.r1:q} | gzip -c > {output.r1:q} 2>{log}
+            zcat {input.r2:q} | gzip -c > {output.r2:q} 2>{log}
+        """

@@ -1,0 +1,112 @@
+--------------------------------------------------------
+-----------------------  Variables  --------------------
+--------------------------------------------------------
+
+name: Variables
+########################  Paths to use  ###############################
+
+# Raw data path: where to find the raw data ?
+raw_data_path: "/shared/projects/sexisol/archive/25_ddRAD_novogene_demultiplexed/fastq/"
+
+# Folder where all the temporary files will be stored
+tmp_path: "/shared/scratch/sexisol/bpajot/tmp/SNP_calling/"
+
+# Where to save the final output data
+output_path: "/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/"
+# Where is the reference genome
+Reference_genome: "/shared/projects/sexisol/archive/genomes_reference/Jaera_praehirsuta_chromosomes.fasta"
+
+
+
+########################  Cut chromosomes  ###############################
+# We need to break the chromosomes in the analysis into bins of a given size to be able to parallelise on the 
+# chosen bins. To do so, we use this parameter (bin_size) to have the maximum number of bases in the chromosomal bins
+# The default value in the function that cuts the chromosomes into bins is 1e6, but this parameter can be changed
+bin_size: 1e7
+
+########################  Missing rate  ###############################
+# We need to use a missing data threshold value on the final vcf. The chosen value (between 0 and 1) will be used as 
+# a maximum of missing data. For axample if you choose 0.95, only data with less than 5% of missing data will be kept
+missing_rate: 0.95
+
+
+---------------------------------------------------------
+-----------------------  Profile  -----------------------
+---------------------------------------------------------
+name: Profile
+########################  Cluster identification  ###############################
+# cluster:
+#   mkdir -p /shared/projects/sexisol/script/bp/Snakemake_SNP_calling/logs/{rule}/error_files/ &&
+#   mkdir -p /shared/projects/sexisol/script/bp/Snakemake_SNP_calling/logs/{rule}/logs/ &&
+#   sbatch
+#     --account=sexisol
+#     --partition={resources.partition}
+#     --cpus-per-task={threads}
+#     --mem={resources.mem_mb}
+#     --job-name={rule}-{wildcards}
+#     --output=/shared/projects/sexisol/script/bp/Snakemake_SNP_calling/logs/{rule}/logs/{rule}-{wildcards}-%j.out
+#     --error=/shared/projects/sexisol/script/bp/Snakemake_SNP_calling/logs/{rule}/error_files/{rule}-{wildcards}-%j.err
+#     --parsable
+
+########################  Resources to use  ###############################
+# default-resources:
+#   - partition=fast
+#   - mem_mb=8000
+#   - tmpdir="/shared/scratch/sexisol/bpajot/tmp/"
+
+########################  Parameters to use for the snakemake  ###############################
+retries: 3
+max-jobs-per-second: 10
+max-status-checks-per-second: 1
+local-cores: 1
+cores: 40
+jobs: 200
+latency-wait: 60
+keep-going: True
+rerun-incomplete: True
+printshellcmds: True
+use-conda: True
+executor: slurm
+# Resources to use
+default-resources:
+  slurm_account: "'sexisol'"
+  mem_mb: "'8000'"
+  nodes: 1
+  runtime: "'86400'" # One day
+  tmpdir: "'/shared/scratch/sexisol/bpajot/tmp/SNP_calling/'"
+slurm-requeue: True
+slurm-partition-config:
+  partitions:
+    fast:
+      max_runtime:  86400 # One day
+      max_mem_mb: 1500000
+    long:
+      max_runtime: 2592000 # 30 days
+      max_mem_mb: 1500000
+
+
+
+---------------------------------------------------------
+---------------------  Environments  --------------------
+---------------------------------------------------------
+name: Environments
+########################  Dependencies  ###############################
+channels:
+  - bioconda
+  - conda-forge
+  - nodefaults
+dependencies:
+  - fastqc = 0.12.1
+  - multiqc = 1.13
+  - fastp = 0.23.1
+  - samtools = 1.15.1
+  - bwa = 0.7.17
+  - bcftools = 1.16
+  - vcftools = 0.1.16
+  - stacks = 2.65
+  # R and R packages
+  - r = 4.3.1
+  - r-pacman
+  - r-tidyverse = 2.0.0
+  - r-argparse
+  - r-ggpubr = 0.6.0
