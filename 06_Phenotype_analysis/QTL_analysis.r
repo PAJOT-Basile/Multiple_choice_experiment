@@ -31,7 +31,7 @@ theme_grid <- my_theme +
         plot.margin = margin(t = 10, r = 10, b = 10, l = 15),
         text = element_text(size = 12))
 
-vcf_file <- "Associated_data/VCF_File.vcf"
+vcf_file <- "/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/VCF_File.vcf"
 vcftools <- "/shared/software/miniconda/envs/vcftools-0.1.16/bin/vcftools"
 
 group_names <- c("Male_forsmani", "Male_praehirsuta", "Female_forsmani", "Female_praehirsuta")
@@ -503,8 +503,10 @@ metadata <- read.table("Associated_data/metadata.tsv",
          # Remove the ">" that are in the data
          across(starts_with(paste0("P", 1:7)), ~ str_remove_all(., ">") %>% trimws() %>% as.numeric())) %>% 
   unique() %>% 
-  mutate(Sum_curved_setaeP1P5 = sum(P1.curv.setae, P2.curv.setae, P3.curv.setae, P4.curv.setae, P5.curv.setae, na.rm = TRUE),
-         Sum_spinesP4P7 = sum(P4.small.ep, P5.ep, P6.ep, P7.ep, na.rm = TRUE)) %>% 
+  mutate(Sum_curved_setaeP1P5 = case_when(is.na(P1.curv.setae) & is.na(P2.curv.setae) & is.na(P3.curv.setae) & is.na(P4.curv.setae) & is.na(P5.curv.setae) ~ NA,
+                                          TRUE ~ sum(P1.curv.setae, P2.curv.setae, P3.curv.setae, P4.curv.setae, P5.curv.setae, na.rm = TRUE)),
+         Sum_spinesP4P7 = case_when(is.na(P4.small.ep) & is.na(P5.ep) & is.na(P6.ep) & is.na(P7.ep) ~ NA,
+                                    TRUE ~ sum(P4.small.ep, P5.ep, P6.ep, P7.ep, na.rm = TRUE))) %>% 
   group_by(Sex, Species) %>% 
   mutate(across(c(Size, Sum_curved_setaeP1P5, Sum_spinesP4P7), ~ (. - mean(., na.rm = TRUE)) / sd(., na.rm = TRUE), .names = "St_{col}")) %>% 
   ungroup()
@@ -581,7 +583,11 @@ summary_stats <- read.table("Associated_data/sumstats_thinned_50k.tsv",
 # Here, a simple linear regression was tested as well as a quadratic regression
 # between size and the number of curved setae/spines. The best model was selected
 # using AIC.
-
+metadata %>% 
+  filter(Sex == "M", Species == "forsmani") %>% 
+  ggplot(aes(x = Size, y = Sum_spinesP4P7)) +
+  geom_smooth(method = "lm", se = FALSE, formula = y ~ x + I(x^2)) +
+  geom_point()
 # Males forsmani spines
 lm_forsmani_spines <- metadata %>%
   filter(Sex == "M", Species == "forsmani") %>% 
@@ -649,14 +655,17 @@ scaled_relatedness <- lapply(c("Male", "Female"), function(sex, relatedness, met
     tab <- relatedness %>% 
       filter(Species == species) %>% 
       left_join(metadata %>% 
-                  select(ID_DNA_RAD, Sex),
+                  select(ID_DNA_RAD, Sex, Size, Sum_curved_setaeP1P5, Sum_spinesP4P7),
                 by = join_by("INDV1" == "ID_DNA_RAD")) %>% 
       left_join(metadata %>% 
-                  select(ID_DNA_RAD, Sex),
+                  select(ID_DNA_RAD, Sex, Size, Sum_curved_setaeP1P5, Sum_spinesP4P7),
                 by = join_by("INDV2" == "ID_DNA_RAD")) %>% 
       filter(Sex.x == str_split(sex, "", simplify = TRUE)[, 1],
-             Sex.y == str_split(sex, "", simplify = TRUE)[, 1]) %>% 
-      select(-starts_with("Sex.")) %>%
+             Sex.y == str_split(sex, "", simplify = TRUE)[, 1],
+             !is.na(Size.x), !is.na(Size.y),
+             !is.na(Sum_curved_setaeP1P5.x), !is.na(Sum_curved_setaeP1P5.y),
+             !is.na(Sum_spinesP4P7.x), !is.na(Sum_spinesP4P7.y)) %>% 
+      select(-c(starts_with("Sex."), starts_with("Size"), starts_with("Sum"))) %>%
       select(-Species) %>%
       pivot_wider(names_from = INDV2, values_from = Relatedness) %>%
       column_to_rownames("INDV1")
@@ -684,18 +693,9 @@ names(scaled_relatedness) <- group_names
 ######### Prepare the genomic data ########
 ###########################################
 # Scale the genome to get rid of missing data
-X <- lapply(c("M", "F"), function(sex, genomic_data){
-  genomic_data <- genomic_data[which(genomic_data@other$Sex == sex)]
-  lapply(c("forsmani", "praehirsuta"), function(species, sex, genomic_data){
-    genomic_data <- genomic_data[which(genomic_data@other$Species == species)]
-    return(scaleGen(genomic_data, NA.method = "mean", scale = FALSE, center = TRUE))
-  }, sex, genomic_data)
-}, data) %>% 
-  unlist(recursive = FALSE)
-names(X) <- group_names
+X <- scaleGen(data, NA.method = "mean", scale = FALSE, center = TRUE)
 
-map_chromosome <- lapply(group_names, function(group_name, X){
-  colnames(X[[group_name]]) %>% 
+map_chromosome <- colnames(X) %>% 
     as.data.frame() %>%
     rename(Position = ".") %>%
     mutate(pos = Position) %>%
@@ -704,123 +704,117 @@ map_chromosome <- lapply(group_names, function(group_name, X){
     left_join(summary_stats, by = c("Locus", "Col")) %>%
     select(Position, Chrom, BP) %>%
     column_to_rownames("Position") %>% 
-    rename(chr = Chrom, pos = BP) %>% 
-    return()
-}, X)
-names(map_chromosome) <- group_names
+    rename(chr = Chrom, pos = BP)
 
-geno <- lapply(group_names, function(group_name, X, df, map_chromosome){
-  sex <- str_split(str_split(group_name, "_", simplify = TRUE)[, 1], "", simplify = TRUE)[, 1]
-  species <- str_split(group_name, "_", simplify = TRUE)[, 2]
-  X[[group_name]] %>% 
+geno <- X %>% 
     as.data.frame() %>% 
     rownames_to_column("ID_DNA_RAD") %>% 
-    inner_join(df %>% 
-                 filter(Species == species, Sex == sex),
+    inner_join(metadata,
                by = "ID_DNA_RAD") %>% 
-    select(ID_DNA_RAD, rownames(map_chromosome[[group_name]])) %>% 
+    select(ID_DNA_RAD, rownames(map_chromosome)) %>% 
     column_to_rownames("ID_DNA_RAD")
-}, X, metadata, map_chromosome)
-names(geno) <- group_names
 
 ###########################################
 ######### Separate the phenotypes #########
 ###########################################
-phenos <- lapply(c("Male", "Female"), function(sex, df, lms){
-  lapply(c("forsmani", "praehirsuta"), function(species, df, lms, sex){
-    if (sex == "Male"){
-      lapply(c("setae", "spines", "size"), function(trait, lms, df, species){
-        if (trait != "size"){
-          to_ret <- lms[[paste0(species, "_", trait)]]$residuals %>% 
-            as.data.frame() %>% 
-            rename(!!sym(paste0("Sum_", trait)) := ".")
-        }else{
-          to_ret <-  metadata %>% 
-            filter(Sex == str_split(sex, "", simplify = TRUE)[, 1],
-                   Species == species,
-                   !is.na(Size)) %>% 
-            select(Size)
-        }
-      }, lms, df, species) %>% 
-        bind_cols() %>%
-        cbind(
-          metadata %>% 
-            filter(Sex == str_split(sex, "", simplify = TRUE)[, 1],
-                   Species == species,
-                   !is.na(Size)) %>% 
-            select(ID_DNA_RAD)) %>% 
-        as_tibble() %>% 
-        rename(genotype = ID_DNA_RAD) %>% 
-        mutate(toto = genotype) %>% 
-        column_to_rownames("toto") %>% 
-        relocate(genotype)
-    }else{
-      metadata %>% 
-        filter(Sex == str_split(sex, "", simplify = TRUE)[, 1],
-               Species == species,
-               !is.na(Size)) %>% 
-        select(ID_DNA_RAD, Size) %>% 
-        mutate(toto = ID_DNA_RAD) %>% 
-        rename(genotype = ID_DNA_RAD) %>% 
-        column_to_rownames("toto") %>% 
-        relocate(genotype)
-    }
-  }, df, lms, sex)
-}, metadata, lms) %>% 
+phenos <- lapply(c("Male", "Female"), function(sex, df){
+  lapply(c("forsmani", "praehirsuta"), function(species, sex, df){
+    df %>% 
+      filter(Sex == str_split(sex, "", simplify = TRUE)[, 1],
+             Species == species,
+             !is.na(ID_DNA_RAD)) %>% 
+      select(ID_DNA_RAD, Size, Sum_curved_setaeP1P5, Sum_spinesP4P7) %>% 
+      select_if(~sum(!is.na(.)) > 0) %>% 
+      mutate(genotype = ID_DNA_RAD) %>% 
+      column_to_rownames("ID_DNA_RAD") %>% 
+      relocate(genotype) %>% 
+      drop_na()
+  }, sex, df)
+}, metadata) %>% 
   unlist(recursive = FALSE)
+# phenos <- lapply(c("Male", "Female"), function(sex, df, lms){
+#   lapply(c("forsmani", "praehirsuta"), function(species, df, lms, sex){
+#     if (sex == "Male"){
+#       lapply(c("setae", "spines", "size"), function(trait, lms, df, species){
+#         if (trait != "size"){
+#           to_ret <- lms[[paste0(species, "_", trait)]]$residuals %>% 
+#             as.data.frame() %>% 
+#             rename(!!sym(paste0("Sum_", trait)) := ".")
+#         }else{
+#           to_ret <-  metadata %>% 
+#             filter(Sex == str_split(sex, "", simplify = TRUE)[, 1],
+#                    Species == species,
+#                    !is.na(Size)) %>% 
+#             select(Size)
+#         }
+#       }, lms, df, species) %>% 
+#         bind_cols() %>%
+#         cbind(
+#           metadata %>% 
+#             filter(Sex == str_split(sex, "", simplify = TRUE)[, 1],
+#                    Species == species,
+#                    !is.na(Size)) %>% 
+#             select(ID_DNA_RAD)) %>% 
+#         as_tibble() %>% 
+#         rename(genotype = ID_DNA_RAD) %>% 
+#         mutate(toto = genotype) %>% 
+#         column_to_rownames("toto") %>% 
+#         relocate(genotype)
+#     }else{
+#       metadata %>% 
+#         filter(Sex == str_split(sex, "", simplify = TRUE)[, 1],
+#                Species == species,
+#                !is.na(Size)) %>% 
+#         select(ID_DNA_RAD, Size) %>% 
+#         mutate(toto = ID_DNA_RAD) %>% 
+#         rename(genotype = ID_DNA_RAD) %>% 
+#         column_to_rownames("toto") %>% 
+#         relocate(genotype)
+#     }
+#   }, df, lms, sex)
+# }, metadata, lms) %>% 
+#   unlist(recursive = FALSE)
 names(phenos) <- group_names
 
 ###########################################
-######### Make the gData objects ##########
+############## Run the GWAS ###############
 ###########################################
 gwas_out <- lapply(group_names, function(group_name, geno, map_chromosome, phenos, scaled_relatedness, df){
   print(group_name)
   phenos_group <- phenos[[group_name]]
-  gdata_object <- createGData(geno = geno[[group_name]],
-              map = map_chromosome[[group_name]],
+  gdata_object <- createGData(geno = geno,
+              map = map_chromosome,
               pheno = phenos_group,
               kin = scaled_relatedness[[group_name]])
 
   runSingleTraitGwas(gdata_object, thrType = "bonf")
   
 }, geno, map_chromosome, phenos, scaled_relatedness, metadata)
+names(gwas_out) <- group_names
 
 
-gData_forsmani <- createGData(geno = geno_forsmani, map = map_chromosome, pheno = pheno_forsmani, kin = kin_forsmani)
+GWAS_out <- gwas_out$Male_forsmani$GWAResult$phenos_group %>% 
+  filter(!is.na(pValue)) %>% 
+  mutate(Sex = "Male", Species = "forsmani") %>% 
+  rbind(gwas_out$Male_praehirsuta$GWAResult$phenos_group %>% 
+          filter(!is.na(pValue)) %>% 
+          mutate(Sex = "Male", Species = "praehirsuta")) %>% 
+  rbind(gwas_out$Female_forsmani$GWAResult$phenos_group %>% 
+          filter(!is.na(pValue)) %>% 
+          mutate(Sex = "Female", Species = "forsmani")) %>% 
+  rbind(gwas_out$Female_praehirsuta$GWAResult$phenos_group %>% 
+          filter(!is.na(pValue)) %>% 
+          mutate(Sex = "Female", Species = "praehirsuta")) %>% 
+  rename(Chromosome = chr,
+         Position = pos,
+         Trait = trait) %>% 
+  mutate(log_pval = -log10(pValue))
+  
 
-gData_praehirsuta <- createGData(geno = geno_praehirsuta, map = map_chromosome, pheno = pheno_praehirsuta, kin = kin_praehirsuta)
-
-###########################################
-################ Run GWAS #################
-###########################################
-GWAS_forsmani <- runSingleTraitGwas(gData_forsmani, thrType = "bonf", remlAlgo = "NR")
-
-GWAS_praehirsuta <- runSingleTraitGwas(gData_praehirsuta, thrType = "bonf")
-
-
-###########################################
-################# Plot GWAS ###############
-###########################################
-GWAS_out <- GWAS_forsmani$GWAResult$pheno_forsmani %>% 
-  select(trait, snp, chr, pos, pValue) %>% 
-  rename(Trait = trait,
-         Position = snp,
-         Chromosome = chr) %>% 
-  mutate(log_pval = -log10(pValue),
-         Species = "forsmani") %>% 
-  rbind(GWAS_praehirsuta$GWAResult$pheno_praehirsuta %>% 
-          select(trait, snp, chr, pos, pValue) %>% 
-          rename(Trait = trait,
-                 Position = snp,
-                 Chromosome = chr) %>% 
-          mutate(log_pval = -log10(pValue),
-                 Species = "praehirsuta")) %>% 
-  select(-Position) %>% 
-  rename(Position = pos)
 
 (GWAS_out %>% 
+    filter(Sex == "Male") %>% 
     geom_manhattan(aes(y = log_pval, facetting1 = Species, facetting2 = Trait), alpha = 0.5)) +
   facet_grid2(Species ~ Trait, scales = "free")
 
-GWAS_forsmani$GWASInfo$varComp$pheno_forsmani$Size["Vg"] / var(pheno_forsmani$Size, na.rm = TRUE)
 
