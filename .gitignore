@@ -56,5 +56,6 @@ rsconnect/
 
 # Vcf2colony
 03_Prepare_Colony_input/
-Associated_data/Rdata/distrib_selectin_differentials_and_gradients_bootstraps_50000.rdata
+Associated_data/Rdata/distrib_selection_differentials_and_gradients_bootstraps_50000.rdata
+Associated_data/VCF_File.vcf
 

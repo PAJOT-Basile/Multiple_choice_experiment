@@ -31,7 +31,7 @@ theme_grid <- my_theme +
         plot.margin = margin(t = 10, r = 10, b = 10, l = 15),
         text = element_text(size = 12))
 
-vcf_file <- "/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/VCF_File.vcf"
+vcf_file <- "Associated_data/VCF_File.vcf"
 vcftools <- "/shared/software/miniconda/envs/vcftools-0.1.16/bin/vcftools"
 
 group_names <- c("Male_forsmani", "Male_praehirsuta", "Female_forsmani", "Female_praehirsuta")
@@ -572,7 +572,7 @@ names(groups_individuals) <- group_names
 
 
 # Import the sumstats of the thinned vcf (locus, chromosome, position, ...)
-summary_stats <- read.table("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/Information_vcf/sumstats_thinned_50k.tsv",
+summary_stats <- read.table("Associated_data/sumstats_thinned_50k.tsv",
                             sep = "\t", header = TRUE)
 
 ######################################
@@ -775,17 +775,7 @@ names(phenos) <- group_names
 ###########################################
 gwas_out <- lapply(group_names, function(group_name, geno, map_chromosome, phenos, scaled_relatedness, df){
   print(group_name)
-  phenos_group <- df %>% 
-    filter(Species == str_split(group_name, "_", simplify = TRUE)[, 2],
-           Sex == str_split(group_name, "", simplify = TRUE)[, 1]) %>% 
-    select(ID_DNA_RAD, Size, Sum_curved_setaeP1P5, Sum_spinesP4P7) %>% 
-    select_if(~sum(!is.na(.)) > 0) %>% 
-    mutate(genotype = ID_DNA_RAD) %>% 
-    relocate(genotype) %>% 
-    column_to_rownames("ID_DNA_RAD")
-  print(head(phenos_group))
-    
-    # phenos[[group_name]]
+  phenos_group <- phenos[[group_name]]
   gdata_object <- createGData(geno = geno[[group_name]],
               map = map_chromosome[[group_name]],
               pheno = phenos_group,
@@ -794,6 +784,8 @@ gwas_out <- lapply(group_names, function(group_name, geno, map_chromosome, pheno
   runSingleTraitGwas(gdata_object, thrType = "bonf")
   
 }, geno, map_chromosome, phenos, scaled_relatedness, metadata)
+
+
 gData_forsmani <- createGData(geno = geno_forsmani, map = map_chromosome, pheno = pheno_forsmani, kin = kin_forsmani)
 
 gData_praehirsuta <- createGData(geno = geno_praehirsuta, map = map_chromosome, pheno = pheno_praehirsuta, kin = kin_praehirsuta)
