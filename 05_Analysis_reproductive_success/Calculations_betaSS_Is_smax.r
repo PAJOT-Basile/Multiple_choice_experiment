@@ -54,7 +54,7 @@ bootstrap_smax_betass_Is <- function(df, nb_boots){
 }
 #### Import data ####
 # Import metadata
-metadata <- read.table("/shared/projects/sexisol/input/Basile/Multiple_choice_experiment/Data/metadata.tsv",
+metadata <- read.table("Associated_data/metadata.tsv",
                        sep = "\t", header = TRUE)%>% 
   # Remove the dulicates
   filter(!grepl("_0", ID_DNA_RAD)) %>% 
@@ -81,7 +81,7 @@ metadata <- read.table("/shared/projects/sexisol/input/Basile/Multiple_choice_ex
 
 
 # Reproductive success
-load("/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/Sexual_selection/reproductive_success_parents.Rdata")
+load("Associated_data/Rdata/reproductive_success_parents.Rdata")
 reproductive_success_parents <- reproductive_success_parents %>% 
   rename(Sex = Parent) %>% 
   mutate(Sex = str_remove_all(Sex, "s")) %>% 
@@ -118,6 +118,15 @@ reproductive_success_parents <- reproductive_success_parents %>%
     p4 = p2 * w4,
     across(c(p0, p1, p2,, p3, p4, w1, W2, w2, w12, W12, W3, w3, w123, W123, W4, w4, w124, W124), ~ ifelse(is.na(.), 0, .)))
 
+interesting_stats <- reproductive_success_parents %>% 
+  select(Species, Sex, W1, W12, W3, W123) %>% 
+  pivot_longer(starts_with("W"), names_to = "Episode", values_to = "Fitness") %>% 
+  group_by(Species, Sex, Episode) %>% 
+  summarize(min = round(min(Fitness, na.rm = TRUE), digits = 2),
+            mean = round(mean(Fitness, na.rm = TRUE), digits = 2),
+            max = round(max(Fitness, na.rm = TRUE), digits = 2),
+            var = round(var(Fitness, na.rm = TRUE), digits = 2))
+
 #### Contributions to total opportunity for selection ####
 I_vals <- reproductive_success_parents %>% 
   filter(w1 > 0) %>% 
@@ -136,6 +145,7 @@ I_vals <- reproductive_success_parents %>%
   left_join(reproductive_success_parents %>% 
           group_by(Species, Sex) %>% 
           summarize(Variance = var(W1),
+                    Mean = mean(W1),
                     I1 = sum(p0 * (w1 - 1)^2)),
           by = c("Species", "Sex")) %>% 
   mutate(smax = Beta_SS * sqrt(I1),
