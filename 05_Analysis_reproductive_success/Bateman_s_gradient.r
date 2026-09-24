@@ -359,7 +359,9 @@ distrib_w1_ff <- reproductive_success_parents %>%
   my_theme +
   theme(axis.title = element_blank(),
         axis.text.y = element_blank(),
-        axis.ticks.y = element_blank())
+        axis.ticks.y = element_blank(),
+        axis.line = element_line(colour = "black"),
+        panel.border = element_blank())
 
 distrib_w12_ff <- reproductive_success_parents %>%
   filter(Species == "forsmani",
@@ -370,7 +372,9 @@ distrib_w12_ff <- reproductive_success_parents %>%
   my_theme +
   theme(axis.title = element_blank(),
         axis.text.x = element_blank(),
-        axis.ticks.x = element_blank())
+        axis.ticks.x = element_blank(),
+        axis.line = element_line(colour = "black"),
+        panel.border = element_blank())
 
 distrib_w1_fm <- reproductive_success_parents %>%
   filter(Species == "forsmani",
@@ -381,7 +385,9 @@ distrib_w1_fm <- reproductive_success_parents %>%
   my_theme +
   theme(axis.title = element_blank(),
         axis.text.y = element_blank(),
-        axis.ticks.y = element_blank())
+        axis.ticks.y = element_blank(),
+        axis.line = element_line(colour = "black"),
+        panel.border = element_blank())
 
 distrib_w12_fm <- reproductive_success_parents %>%
   filter(Species == "forsmani",
@@ -392,7 +398,9 @@ distrib_w12_fm <- reproductive_success_parents %>%
   my_theme +
   theme(axis.title = element_blank(),
         axis.text.x = element_blank(),
-        axis.ticks.x = element_blank())
+        axis.ticks.x = element_blank(),
+        axis.line = element_line(colour = "black"),
+        panel.border = element_blank())
 
 distrib_w1_pf <- reproductive_success_parents %>%
   filter(Species == "praehirsuta",
@@ -403,7 +411,9 @@ distrib_w1_pf <- reproductive_success_parents %>%
   my_theme +
   theme(axis.title = element_blank(),
         axis.text.y = element_blank(),
-        axis.ticks.y = element_blank())
+        axis.ticks.y = element_blank(),
+        axis.line = element_line(colour = "black"),
+        panel.border = element_blank())
 
 distrib_w12_pf <- reproductive_success_parents %>%
   filter(Species == "praehirsuta",
@@ -414,7 +424,9 @@ distrib_w12_pf <- reproductive_success_parents %>%
   my_theme +
   theme(axis.title = element_blank(),
         axis.text.x = element_blank(),
-        axis.ticks.x = element_blank())
+        axis.ticks.x = element_blank(),
+        axis.line = element_line(colour = "black"),
+        panel.border = element_blank())
 
 distrib_w1_pm <- reproductive_success_parents %>%
   filter(Species == "praehirsuta",
@@ -425,7 +437,9 @@ distrib_w1_pm <- reproductive_success_parents %>%
   my_theme +
   theme(axis.title = element_blank(),
         axis.text.y = element_blank(),
-        axis.ticks.y = element_blank())
+        axis.ticks.y = element_blank(),
+        axis.line = element_line(colour = "black"),
+        panel.border = element_blank())
 
 distrib_w12_pm <- reproductive_success_parents %>%
   filter(Species == "praehirsuta",
@@ -436,7 +450,9 @@ distrib_w12_pm <- reproductive_success_parents %>%
   my_theme +
   theme(axis.title = element_blank(),
         axis.text.x = element_blank(),
-        axis.ticks.x = element_blank())
+        axis.ticks.x = element_blank(),
+        axis.line = element_line(colour = "black"),
+        panel.border = element_blank())
 
 # Prepare the annotations
 ann1 <- ggplot() +
@@ -489,4 +505,4 @@ final_figure <- ann1 + ann2 +
               heights = c(0.1, 0.2, 1, 0.2, 1, 0.1))
 
 final_figure
-ggsave(plot = final_figure, "../Figures/Distribution_reproductive_success.png", scale = 4, width = 1200, height = 1000, units = "px")
+ggsave(plot = final_figure, "../Figures/Distribution_reproductive_success.png", scale = 4, width = 1200, height = 1100, units = "px")
