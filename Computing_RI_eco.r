@@ -4,12 +4,13 @@
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(char = c("tidyverse"), character.only = TRUE)
 
+
 ##############################
 ###### Useful variables ######
 ##############################
 set.seed(123456789)
 
-nb_boots <- 10000
+nb_boots <- 1000
 
 ##############################
 ###### Useful functions ######
@@ -42,7 +43,7 @@ bootstrap_RI_eco <- function(data_table, direction=NULL, nb_bootstraps = nb_boot
 ##############################
 ######### Import data ########
 ##############################
-sampling_data <- read.table("../../../Chapter_1_Sexual_selection/Code/Associated_data/Computing_RI_eco.tsv", sep = "\t", header = T) %>% 
+sampling_data <- read.table("Associated_data/Computing_RI_eco.tsv", sep = "\t", header = T) %>% 
   mutate(Phenotype_substrate = paste(Phenotype, Substrate, sep = "_"))
 
 

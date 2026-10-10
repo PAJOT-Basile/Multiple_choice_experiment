@@ -1,3 +1,8 @@
+# Look at the distribution of different phenotypic traits and plot them
+#   1. The total number of curved setae
+#   2. The total number of spines
+#   3. The size of the indivdiuals
+
 ##############################
 ########## Libraries #########
 ##############################
