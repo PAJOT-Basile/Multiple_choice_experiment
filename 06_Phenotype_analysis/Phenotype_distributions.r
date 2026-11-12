@@ -12,6 +12,7 @@ pacman::p_load(char = libraries, character.only = TRUE)
 ##############################
 ###### Useful variables ######
 ##############################
+colours_sexes <- c("Female" = "#D55E00", "Male" = "purple4")
 colours_species <- c("praehirsuta" = "navy", "forsmani" = "#3A9AB2")
 
 my_theme <- theme_bw() +
@@ -39,30 +40,20 @@ str_split_last <- function(string, pattern){
 ######### Import data ########
 ##############################
 # Metadata
-metadata <- read.table("/shared/projects/sexisol/input/Basile/Multiple_choice_experiment/Data/metadata.tsv",
-                       sep = "\t", header = TRUE)%>% 
-  # Remove the dulicates
+metadata <- read.table("Associated_data/metadata.tsv",
+                       sep = "\t", header = TRUE) %>% 
+  # Remove controls that
   filter(!grepl("_0", ID_DNA_RAD)) %>% 
-  rowwise() %>% 
+  # remove sequencing duplicates
   mutate(ID_DNA_RAD = str_split_fixed(ID_DNA_RAD, "r", 2)[, 1] %>% 
-           str_remove_all("a|b"),
-         Size = str_replace_all(Size, ",", ".") %>% 
-           as.numeric(),
-         # Recompute the total number of spines and setae per pereopod to homogeneise the values for the parents and offspring
-         P7.ep = case_when(
-           all(is.na(c(P7.very.large.ep, P7.larg.ep, P7.med.ep, P7.small.ep))) ~ NA,
-           TRUE ~ sum(P7.very.large.ep, P7.larg.ep, P7.med.ep, P7.small.ep, na.rm = TRUE)),
-         P6.ep.dist = case_when(all(is.na(c(P6.ep.dist.very.large, P6.ep.dist.medium, P6.ep.dist.large, P6.ep.dist.small))) ~ NA,
-                                TRUE ~ sum(P6.ep.dist.very.large, P6.ep.dist.medium, P6.ep.dist.large, P6.ep.dist.small, na.rm = TRUE)),
-         P6.ep = case_when(
-           all(is.na(c(P6.very.large.ep, P6.larg.ep, P6.med.ep, P6.small.ep))) ~ NA,
-           TRUE ~ sum(P6.very.large.ep, P6.larg.ep, P6.med.ep, P6.small.ep, na.rm = TRUE)
-         ),
-         Family_level = factor(Family_level, levels = c("parents", "offspring")),
-         Species = factor(Species, levels = c("forsmani", "praehirsuta")),
-         # Remove the ">" that are in the data
-         across(starts_with(paste0("P", 1:7)), ~ str_remove_all(., ">") %>% trimws() %>% as.numeric())) %>% 
-  unique()
+           str_remove_all(., "a|b"),
+         animal = as.integer(str_remove_all(ID_DNA_RAD, "E"))) %>% 
+  unique() %>% 
+  filter(!is.na(ID_DNA_RAD)) %>% 
+  group_by(Sex, Species) %>% 
+  mutate(across(c(Size, starts_with("Sum_")), ~ (. - mean(., na.rm = TRUE)) / sd(., na.rm = TRUE), .names = "St_{col}")) %>% 
+  ungroup()
+
 
 
 ####################################
@@ -70,7 +61,7 @@ metadata <- read.table("/shared/projects/sexisol/input/Basile/Multiple_choice_ex
 ####################################
 # Plot the distribution of the traits
 nb_spines <- metadata %>% 
-  select(Species, Sex, Family_level, P7.ep, P6.ep, P5.ep) %>% 
+  select(Species, Sex, Family_level, P7.ep, P6.ep) %>% 
   filter(Sex == "M") %>%
   rowwise() %>% 
   pivot_longer(cols = starts_with("P"), values_to = "count", names_to = "Trait") %>% 
@@ -97,10 +88,10 @@ nb_spines <- metadata %>%
         plot.margin = unit(c(0, 2, 0, 0), units = "lines"))
 # Plot the distribution of the traits
 nb_setae <- metadata %>% 
-  select(Species, Sex, Family_level, P4.curv.setae, P3.curv.setae, P2.curv.setae, P1.curv.setae) %>% 
+  select(Species, Sex, Family_level, default_P5.curv.setae, default_P4.curv.setae, default_P3.curv.setae, default_P2.curv.setae, default_P1.curv.setae) %>% 
   filter(Sex == "M") %>%
   rowwise() %>% 
-  pivot_longer(cols = c(starts_with("P")), values_to = "count", names_to = "Trait") %>% 
+  pivot_longer(cols = c(starts_with("default")), values_to = "count", names_to = "Trait") %>% 
   drop_na() %>% 
   ggplot(aes(x = count, alpha = Family_level, fill = Species)) +
   geom_histogram(aes(y = after_stat(density)), bins = 30, position = "dodge") +
@@ -110,11 +101,13 @@ nb_setae <- metadata %>%
               labeller = as_labeller(c(
                 "forsmani" = paste0("J. forsmani (n = ", get_number_indivs("parents", "forsmani"), " parents and n = ", get_number_indivs("offspring", "forsmani"), " offspring)"),
                 "praehirsuta" = paste0("J. praehirsuta (n = ", get_number_indivs("parents", "praehirsuta"), " parents and n = ", get_number_indivs("offspring", "praehirsuta"), " offspring)"),
-                "P1.curv.setae" = "Pereiopod 1",
-                "P2.curv.setae" = "Pereiopod 2",
-                "P3.curv.setae" = "Pereiopod 3",
-                "P4.curv.setae" = "Pereiopod 4")),
-              scales = "free") +
+                "default_P1.curv.setae" = "Pereiopod 1",
+                "default_P2.curv.setae" = "Pereiopod 2",
+                "default_P3.curv.setae" = "Pereiopod 3",
+                "default_P4.curv.setae" = "Pereiopod 4",
+                "default_P5.curv.setae" = "Pereiopod 5")),
+              scales = "free",
+              independent = "y") +
   labs(x = "Number of setae",
        y = "Density",
        tag = "(A)") +
@@ -156,9 +149,48 @@ size <- metadata %>%
 ggarrange(nb_setae,
   ggarrange(nb_spines, size,
             widths = c(3, 1)),
-  ncol = 1) #%>% 
-  # ggsave(plot = ., filename = "/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/Figures/Phenotypic_traits/Distribution_traits.png",
-  #        scale = 4, width = 2400, height = 1200, units = "px")
+  ncol = 1) %>% 
+  ggsave(plot = ., filename = "../Figures/Suppfigs/Distribution_traits.png",
+         scale = 4, width = 2400, height = 1200, units = "px")
+###################################################
+##### Distribution sum sexual traits and size #####
+###################################################
+distrib_traits_under_selection <- metadata %>% 
+  filter(Family_level == "parents") %>% 
+  pivot_longer(c(Sum_curved_setaeP1P5_trunc, Sum_spinesP6P7, Size),
+               names_to = "Trait", values_to = "Count") %>% 
+  mutate(Trait = case_when(Trait == "Size" & Sex == "M" ~ "Male_Size",
+                           Trait == "Size" & Sex == "F" ~ "Female_Size",
+                           TRUE ~ Trait),
+    Trait = factor(Trait, levels = c("Female_Size", "Male_Size", "Sum_curved_setaeP1P5_trunc", "Sum_spinesP6P7"))) %>% 
+  filter(!is.na(Trait), !(Sex == "F" & Trait %in% c("Sum_curved_setaeP1P5_trunc", "Sum_spinesP6P7"))) %>% 
+  ggplot(aes(x = Count, alpha = Family_level, fill = Species)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, position = "dodge") +
+  scale_fill_manual(values = colours_species) +
+  scale_alpha_manual(values = c("parents" = 0.9, "offspring" = 0.3)) +
+  facet_grid2(Species ~ Trait,
+              labeller = as_labeller(c(
+                "Female_Size" = "Female size\n(mm)",
+                "Male_Size" = "Male size\n(mm)",
+                "Sum_curved_setaeP1P5_trunc" = "Sum of curved setae",
+                "Sum_spinesP6P7" = "Sum of spines",
+                "forsmani" = "J. forsmani",
+                "praehirsuta" = "J. praehirsuta")),
+              scales = "free",
+              independent = "y") +
+  labs(x = "",
+       y = "Density") +
+  theme_bw() +
+  theme(text = element_text(size = 30),
+        legend.position = "none",
+        strip.text.y = element_text(face = "italic"),
+        plot.margin = unit(c(0, 2, 0, 0), units = "lines"),
+        axis.title.x = element_blank())
+
+distrib_traits_under_selection
+ggsave("../Figures/tmp/Distribution_traits_under_selection_parents.png",
+       distrib_traits_under_selection, scale = 4, width = 1400, height = 800,
+       units = "px")
 
 ####################################
 ##### Distribution per segment #####

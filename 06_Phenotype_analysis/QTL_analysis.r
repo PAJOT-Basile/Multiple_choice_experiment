@@ -7,11 +7,10 @@
 #         relatedness matrix between individuals, genomic data)
 #     5. Run the QTL analysis
 
-
 ########################################
 ############## Libraries ###############
 ########################################
-libraries <- c("tidyverse", "adegenet", "vcfR", "statgenGWAS", "ggforce", "ggh4x", "ggpubr")
+libraries <- c("tidyverse", "adegenet", "vcfR", "statgenGWAS", "ggnewscale", "patchwork")
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(char = libraries, character.only = TRUE)
 
@@ -31,68 +30,33 @@ theme_grid <- my_theme +
         plot.margin = margin(t = 10, r = 10, b = 10, l = 15),
         text = element_text(size = 12))
 
-vcf_file <- "/shared/projects/sexisol/finalresult/ddRAD_multiple_choice_exp/09_thin_vcf/VCF_File.vcf"
-vcftools <- "/shared/software/miniconda/envs/vcftools-0.1.16/bin/vcftools"
+vcf_file <- "Associated_data/VCF_File.vcf"
+# vcftools <- "/shared/software/miniconda/envs/vcftools-0.1.16/bin/vcftools"
 
 group_names <- c("Male_forsmani", "Male_praehirsuta", "Female_forsmani", "Female_praehirsuta")
 
 ##############################
 ###### Useful functions ######
 ##############################
-"%not_in%" <- function(x, y){return(!(x %in% y))}
-
-Get_chromosome_summary_information <- function(chromosome_recap){
-  #' This function makes a recap of the chromosome information
-  #' (max position, center, ...).
-  #' /!\ THE CHROMOSOMES HAVE TO BE IN THE CORRECT ORDER AND THEIR COLUMN HAS TO BE NAMED "Chromosome"
-  if ("Chromosome" %not_in% names(chromosome_recap)) stop("Is your column containing the names of the chromosomes named 'Chromosome'?")
-  if ("Position" %not_in% names(chromosome_recap)) stop("Is your column containing the positions along the chromosomes named 'Position'?")
-  
-  
-  chromosome_recap %>% 
-    group_by(Chromosome) %>% 
-    summarize(max_position = max(Position, na.rm = TRUE)) %>% 
-    mutate(Start_chromosome = cumsum(lag(max_position + 1, default = 0)),
-           Center_chromosome = round(max_position) / 2 + Start_chromosome) %>% 
-    return()
-}
-
+source("98_Transversal_scripts/Transversal_functions.r")
 
 ##############################
 ######### Import data ########
 ##############################
 # Metadata
 metadata <- read.table("Associated_data/metadata.tsv",
-                       sep = "\t", header = TRUE)%>% 
-  # Remove the dulicates
+                       sep = "\t", header = TRUE) %>% 
+  # Remove controls that
   filter(!grepl("_0", ID_DNA_RAD),
          Family_level == "offspring") %>% 
-  rowwise() %>% 
-  mutate(ID_DNA_RAD1 = str_split_fixed(ID_DNA_RAD, "r", 2)[, 1] %>% 
-           str_remove_all("a|b"),
-         Size = str_replace_all(Size, ",", ".") %>% 
-           as.numeric(),
-         # Recompute the total number of spines and setae per pereopod to homogeneise the values for the parents and offspring
-         P7.ep = case_when(
-           all(is.na(c(P7.very.large.ep, P7.larg.ep, P7.med.ep, P7.small.ep))) ~ NA,
-           TRUE ~ sum(P7.very.large.ep, P7.larg.ep, P7.med.ep, P7.small.ep, na.rm = TRUE)),
-         P6.ep.dist = case_when(all(is.na(c(P6.ep.dist.very.large, P6.ep.dist.medium, P6.ep.dist.large, P6.ep.dist.small))) ~ NA,
-                                TRUE ~ sum(P6.ep.dist.very.large, P6.ep.dist.medium, P6.ep.dist.large, P6.ep.dist.small, na.rm = TRUE)),
-         P6.ep = case_when(
-           all(is.na(c(P6.very.large.ep, P6.larg.ep, P6.med.ep, P6.small.ep))) ~ NA,
-           TRUE ~ sum(P6.very.large.ep, P6.larg.ep, P6.med.ep, P6.small.ep, na.rm = TRUE)
-         ),
-         Family_level = factor(Family_level, levels = c("parents", "offspring")),
-         Species = factor(Species, levels = c("forsmani", "praehirsuta")),
-         # Remove the ">" that are in the data
-         across(starts_with(paste0("P", 1:7)), ~ str_remove_all(., ">") %>% trimws() %>% as.numeric())) %>% 
+  # remove sequencing duplicates
+  mutate(ID_DNA_RAD = str_split_fixed(ID_DNA_RAD, "r", 2)[, 1] %>% 
+           str_remove_all(., "a|b"),
+         animal = as.integer(str_remove_all(ID_DNA_RAD, "E"))) %>% 
   unique() %>% 
-  mutate(Sum_curved_setaeP1P5 = case_when(is.na(P1.curv.setae) & is.na(P2.curv.setae) & is.na(P3.curv.setae) & is.na(P4.curv.setae) & is.na(P5.curv.setae) ~ NA,
-                                          TRUE ~ sum(P1.curv.setae, P2.curv.setae, P3.curv.setae, P4.curv.setae, P5.curv.setae, na.rm = TRUE)),
-         Sum_spinesP4P7 = case_when(is.na(P4.small.ep) & is.na(P5.ep) & is.na(P6.ep) & is.na(P7.ep) ~ NA,
-                                    TRUE ~ sum(P4.small.ep, P5.ep, P6.ep, P7.ep, na.rm = TRUE))) %>% 
+  filter(!is.na(ID_DNA_RAD)) %>% 
   group_by(Sex, Species) %>% 
-  mutate(across(c(Size, Sum_curved_setaeP1P5, Sum_spinesP4P7), ~ (. - mean(., na.rm = TRUE)) / sd(., na.rm = TRUE), .names = "St_{col}")) %>% 
+  mutate(across(c(Size, starts_with("Sum_")), ~ (. - mean(., na.rm = TRUE)) / sd(., na.rm = TRUE), .names = "St_{col}")) %>% 
   ungroup()
 
 
@@ -167,35 +131,35 @@ summary_stats <- read.table("Associated_data/sumstats_thinned_50k.tsv",
 # Here, a simple linear regression was tested as well as a quadratic regression
 # between size and the number of curved setae/spines. The best model was selected
 # using AIC.
-metadata %>% 
-  filter(Sex == "M", Species == "forsmani") %>% 
-  ggplot(aes(x = Size, y = Sum_spinesP4P7)) +
-  geom_smooth(method = "lm", se = FALSE, formula = y ~ x + I(x^2)) +
-  geom_point()
-# Males forsmani spines
-lm_forsmani_spines <- metadata %>%
-  filter(Sex == "M", Species == "forsmani") %>% 
-  lm(Sum_spinesP4P7 ~ Size + I(Size^2), data = .)
-
-# Males forsmani setae
-lm_forsmani_setae <- metadata %>%
-  filter(Sex == "M", Species == "forsmani") %>% 
-  lm(Sum_curved_setaeP1P5  ~ Size, data = .)
-
-# Males praehirsuta setae
-lm_praehirsuta_setae <- metadata %>%
-  filter(Sex == "M", Species == "praehirsuta") %>% 
-  lm(Sum_curved_setaeP1P5 ~ Size, data = .)
-  
-# Males praehirsuta spines
-lm_praehirsuta_spines <- metadata %>% 
-  filter(Sex == "M", Species == "praehirsuta") %>% 
-  lm(Sum_spinesP4P7 ~ Size, data = .)
-
-lms <- list("forsmani_spines" = lm_forsmani_spines,
-            "forsmani_setae" = lm_forsmani_setae,
-            "praehirsuta_spines" = lm_praehirsuta_spines,
-            "praehirsuta_setae" = lm_praehirsuta_setae)
+# metadata %>% 
+#   filter(Sex == "M", Species == "forsmani") %>% 
+#   ggplot(aes(x = Size, y = Sum_spinesP6P7)) +
+#   geom_smooth(method = "lm", se = FALSE, formula = y ~ x + I(x^2)) +
+#   geom_point()
+# # Males forsmani spines
+# lm_forsmani_spines <- metadata %>%
+#   filter(Sex == "M", Species == "forsmani") %>% 
+#   lm(Sum_spinesP6P7 ~ Size + I(Size^2), data = .)
+# 
+# # Males forsmani setae
+# lm_forsmani_setae <- metadata %>%
+#   filter(Sex == "M", Species == "forsmani") %>% 
+#   lm(Sum_curved_setaeP1P5_default  ~ Size, data = .)
+# 
+# # Males praehirsuta setae
+# lm_praehirsuta_setae <- metadata %>%
+#   filter(Sex == "M", Species == "praehirsuta") %>% 
+#   lm(Sum_curved_setaeP1P5_default ~ Size, data = .)
+#   
+# # Males praehirsuta spines
+# lm_praehirsuta_spines <- metadata %>% 
+#   filter(Sex == "M", Species == "praehirsuta") %>% 
+#   lm(Sum_spinesP6P7 ~ Size, data = .)
+# 
+# lms <- list("forsmani_spines" = lm_forsmani_spines,
+#             "forsmani_setae" = lm_forsmani_setae,
+#             "praehirsuta_spines" = lm_praehirsuta_spines,
+#             "praehirsuta_setae" = lm_praehirsuta_setae)
 
 
 ######################################
@@ -239,16 +203,16 @@ scaled_relatedness <- lapply(c("Male", "Female"), function(sex, relatedness, met
     tab <- relatedness %>% 
       filter(Species == species) %>% 
       left_join(metadata %>% 
-                  select(ID_DNA_RAD, Sex, Size, Sum_curved_setaeP1P5, Sum_spinesP4P7),
+                  select(ID_DNA_RAD, Sex, Size, Sum_curved_setaeP1P5_default, Sum_spinesP6P7),
                 by = join_by("INDV1" == "ID_DNA_RAD")) %>% 
       left_join(metadata %>% 
-                  select(ID_DNA_RAD, Sex, Size, Sum_curved_setaeP1P5, Sum_spinesP4P7),
+                  select(ID_DNA_RAD, Sex, Size, Sum_curved_setaeP1P5_default, Sum_spinesP6P7),
                 by = join_by("INDV2" == "ID_DNA_RAD")) %>% 
       filter(Sex.x == str_split(sex, "", simplify = TRUE)[, 1],
              Sex.y == str_split(sex, "", simplify = TRUE)[, 1],
              !is.na(Size.x), !is.na(Size.y),
-             !is.na(Sum_curved_setaeP1P5.x), !is.na(Sum_curved_setaeP1P5.y),
-             !is.na(Sum_spinesP4P7.x), !is.na(Sum_spinesP4P7.y)) %>% 
+             !is.na(Sum_curved_setaeP1P5_default.x), !is.na(Sum_curved_setaeP1P5_default.y),
+             !is.na(Sum_spinesP6P7.x), !is.na(Sum_spinesP6P7.y)) %>% 
       select(-c(starts_with("Sex."), starts_with("Size"), starts_with("Sum"))) %>%
       select(-Species) %>%
       pivot_wider(names_from = INDV2, values_from = Relatedness) %>%
@@ -307,7 +271,7 @@ phenos <- lapply(c("Male", "Female"), function(sex, df){
       filter(Sex == str_split(sex, "", simplify = TRUE)[, 1],
              Species == species,
              !is.na(ID_DNA_RAD)) %>% 
-      select(ID_DNA_RAD, Size, Sum_curved_setaeP1P5, Sum_spinesP4P7) %>% 
+      select(ID_DNA_RAD, Size, Sum_curved_setaeP1P5_default, Sum_spinesP6P7) %>% 
       select_if(~sum(!is.na(.)) > 0) %>% 
       mutate(genotype = ID_DNA_RAD) %>% 
       column_to_rownames("ID_DNA_RAD") %>% 
@@ -363,9 +327,14 @@ names(phenos) <- group_names
 ###########################################
 ############## Run the GWAS ###############
 ###########################################
-gwas_out <- lapply(group_names, function(group_name, geno, map_chromosome, phenos, scaled_relatedness, df){
+gwas_out <- lapply(group_names, function(group_name, geno, map_chromosome, phenos, scaled_relatedness){
   print(group_name)
-  phenos_group <- phenos[[group_name]]
+  if (grepl("Female", group_name)){
+    phenos_group <- phenos[[group_name]] %>% 
+      select(-Sum_curved_setaeP1P5_default)
+  }else{
+    phenos_group <- phenos[[group_name]]
+  }
   gdata_object <- createGData(geno = geno,
               map = map_chromosome,
               pheno = phenos_group,
@@ -373,7 +342,7 @@ gwas_out <- lapply(group_names, function(group_name, geno, map_chromosome, pheno
 
   runSingleTraitGwas(gdata_object, thrType = "bonf")
   
-}, geno, map_chromosome, phenos, scaled_relatedness, metadata)
+}, geno, map_chromosome, phenos, scaled_relatedness)
 names(gwas_out) <- group_names
 
 
@@ -395,10 +364,212 @@ GWAS_out <- gwas_out$Male_forsmani$GWAResult$phenos_group %>%
   mutate(log_pval = -log10(pValue))
   
 
+#####################################################
+############## Prepare Manhattan plot ###############
+#####################################################
+# TODO: tout préparer pour tester de faire un joli manhattan plot
+nb_chromosomes <- GWAS_out$Chromosome %>%
+  unique() %>%
+  length()
 
-(GWAS_out %>% 
-    filter(Sex == "Male") %>% 
-    geom_manhattan(aes(y = log_pval, facetting1 = Species, facetting2 = Trait), alpha = 0.5)) +
-  facet_grid2(Species ~ Trait, scales = "free")
+
+colour_chromosome <- data.frame(
+  "Chromosome" = rep(GWAS_out$Chromosome %>% unique(), 2),
+  "Colour" = c(rep(c("#3A9AB2", "#9EE1EB"), nb_chromosomes)[1:nb_chromosomes],
+               rep(c("navy", "#A0A0D7"), nb_chromosomes)[1:nb_chromosomes]),
+  "Species" = c(rep("forsmani", nb_chromosomes),
+                rep("praehirsuta", nb_chromosomes))
+)
+
+default_colours <- data.frame(
+  "Chromosome" = GWAS_out$Chromosome %>% unique(),
+  "Colour" = rep(c("grey41", "grey4"), nb_chromosomes)[1:nb_chromosomes]
+)
+  
+
+GWAS_out_prep <- GWAS_out %>% 
+  mutate(Locus_name = str_remove_all(snp, ":[+-].[01]$")) %>% 
+  left_join(summary_stats %>% 
+              select(Locus_name, BP_cumul),
+            by = "Locus_name",
+            relationship = "many-to-one")
+
+
+chromosome_centers <- GWAS_out_prep %>% 
+  filter(Species == "forsmani") %>% 
+  group_by(Chromosome) %>% 
+  # The values of the centers of the chromosomes are approximated using the
+  # mean function
+  summarise(center = mean(BP_cumul, na.rm = TRUE))
+
+
+
+threshold_pvalue <- 5
+
+##################################################
+############## Plot primary figure ###############
+##################################################
+GWAS_setae_plot_forsmani <- GWAS_out_prep %>%
+  filter(Sex == "Male",
+         Trait == "Sum_curved_setaeP1P5_default",
+         Species == "forsmani") %>% 
+  ggplot() +
+  geom_point(data = . %>% 
+               filter(log_pval < threshold_pvalue), size = 3, alpha = 0.2,
+             aes(x = BP_cumul, y = log_pval, colour = Chromosome)) +
+  scale_colour_manual(values = default_colours %>% 
+                        pull(Colour),
+                      guide = "none") +
+  new_scale_colour() +
+  geom_point(data = . %>% 
+               filter(log_pval > threshold_pvalue), size = 3, alpha = 0.9,
+             aes(x = BP_cumul, y = log_pval, colour = Chromosome)) +
+  scale_colour_manual(values = colour_chromosome %>% 
+                        filter(Species == "forsmani") %>% 
+                        pull(Colour),
+                      guide = "none") +
+  geom_hline(yintercept = threshold_pvalue, colour = "grey40", lty = "dotted",
+             lwd = 1) +
+  scale_x_continuous(labels = (chromosome_centers$Chromosome %>%
+                                 str_split_fixed(., "G", 2))[, 2],
+                     breaks = chromosome_centers$center) +
+  labs(tag = "(A)") +
+  facet_wrap(vars(Species),
+             labeller = as_labeller(c("forsmani" = "J. forsmani"))) +
+  my_theme +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_blank(),
+        axis.title.x = element_blank(),
+        strip.text = element_text(face = "italic"),
+        axis.title.y = element_blank(),
+        plot.tag = element_text(size = 20))
+
+GWAS_setae_plot_praehirsuta <- GWAS_out_prep %>%
+  filter(Sex == "Male",
+         Trait == "Sum_curved_setaeP1P5_default",
+         Species == "praehirsuta") %>% 
+  ggplot() +
+  geom_point(data = . %>% 
+               filter(log_pval < threshold_pvalue), size = 3, alpha = 0.2,
+             aes(x = BP_cumul, y = log_pval, colour = Chromosome)) +
+  scale_colour_manual(values = default_colours %>% 
+                        pull(Colour),
+                      guide = "none") +
+  new_scale_colour() +
+  geom_point(data = . %>% 
+               filter(log_pval > threshold_pvalue), size = 3, alpha = 0.9,
+             aes(x = BP_cumul, y = log_pval, colour = Chromosome)) +
+  scale_colour_manual(values = colour_chromosome %>% 
+                        filter(Species == "praehirsuta") %>% 
+                        pull(Colour),
+                      guide = "none") +
+  geom_hline(yintercept = threshold_pvalue, colour = "grey40", lty = "dotted",
+             lwd = 1) +
+  scale_x_continuous(labels = (chromosome_centers$Chromosome %>%
+                                 str_split_fixed(., "G", 2))[, 2],
+                     breaks = chromosome_centers$center) +
+  labs(tag = "(C)") +
+  facet_wrap(vars(Species),
+             labeller = as_labeller(c("praehirsuta" = "J. praehirsuta"))) +
+  my_theme +
+  labs(x = "Chromosome") +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.text = element_text(face = "italic"),
+        axis.title.y = element_blank(),
+        plot.tag = element_text(size = 20))
+
+
+
+distribution_setae_forsmani <- metadata %>%
+  filter(Species == "forsmani",
+         Sex == "M") %>% 
+  ggplot(aes(x = Sum_curved_setaeP1P5_default)) +
+  geom_histogram(fill = "#3A9AB2", bins = 50) +
+  facet_wrap(vars(Species),
+             labeller = as_labeller(c("forsmani" = "J. forsmani"))) +
+  labs(tag = "(B)") +
+  my_theme +
+  theme(strip.text = element_text(face = "italic"),
+        axis.title = element_blank(),
+        plot.tag = element_text(size = 20))
+
+distribution_setae_praehirsuta <- metadata %>%
+  filter(Species == "praehirsuta",
+         Sex == "M") %>% 
+  ggplot(aes(x = Sum_curved_setaeP1P5_default)) +
+  geom_histogram(fill = "navy", bins = 50) +
+  facet_wrap(vars(Species),
+             labeller = as_labeller(c("praehirsuta" = "J. praehirsuta"))) +
+  labs(x = "Sum of curved setae",
+       tag = "(D)") +
+  my_theme +
+  theme(strip.text = element_text(face = "italic"),
+        axis.title.y = element_blank(),
+        plot.tag = element_text(size = 20))
+
+title_y_axis <- ggplot() +
+  geom_text(aes(x = 0, y = 0, label = "bold('-lo'*g[10] *' p-value for number of sexual setae')"),
+            parse = TRUE, size = 6, angle = 90) +
+  theme_void()
+
+
+GWAS_setae_plot <- title_y_axis + GWAS_setae_plot_forsmani + distribution_setae_forsmani +
+  GWAS_setae_plot_praehirsuta + distribution_setae_praehirsuta +
+  plot_layout(design = "ABC
+              ADE",
+              widths = c(0.1, 1, 0.3))
+
+GWAS_setae_plot
+
+ggsave("../Figures/tmp/GWAS_setae.png", GWAS_setae_plot,
+       scale = 4, width = 1200, height = 800, units = "px")
+
+
+#########################################################
+############## Plot supplementary figures ###############
+#########################################################
+GWAS_size_plot_m <- (GWAS_out %>% 
+                     filter(Sex == "Male",
+                            Trait == "Size") %>% 
+                     geom_manhattan(aes(y = log_pval, facetting1 = Species), alpha = 0.5)) +
+  facet_wrap(vars(Species), scales = "free", ncol = 1,
+             labeller = as_labeller(c("forsmani" = "J. forsmani",
+                                      "praehirsuta" = "J. praehirsuta"))) +
+  theme(strip.text = element_text(face = "italic"))
+
+GWAS_size_plot_m
+ggsave("../Figures/tmp/GWAS_size_males.png", GWAS_size_plot_m,
+       scale = 4, width = 1200, height = 800, units = "px")
+
+
+GWAS_size_plot_f <- (GWAS_out %>% 
+                       filter(Sex == "Female",
+                              Trait == "Size") %>% 
+                       geom_manhattan(aes(y = log_pval, facetting1 = Species), alpha = 0.5)) +
+  facet_wrap(vars(Species), scales = "free", ncol = 1,
+             labeller = as_labeller(c("forsmani" = "J. forsmani",
+                                      "praehirsuta" = "J. praehirsuta"))) +
+  theme(strip.text = element_text(face = "italic"))
+
+GWAS_size_plot_f
+ggsave("../Figures/tmp/GWAS_size_females.png", GWAS_size_plot_f,
+       scale = 4, width = 1200, height = 800, units = "px")
+
+
+
+GWAS_spines_plot <- (GWAS_out %>% 
+                      filter(Sex == "Male",
+                             Trait == "Sum_spinesP6P7") %>% 
+                      geom_manhattan(aes(y = log_pval, facetting1 = Species), alpha = 0.5)) +
+  facet_wrap(vars(Species), scales = "free", ncol = 1,
+             labeller = as_labeller(c("forsmani" = "J. forsmani",
+                                      "praehirsuta" = "J. praehirsuta"))) +
+  theme(strip.text = element_text(face = "italic"))
+
+GWAS_spines_plot
+ggsave("../Figures/tmp/GWAS_spines.png", GWAS_spines_plot,
+       scale = 4, width = 1200, height = 800, units = "px")
 
 

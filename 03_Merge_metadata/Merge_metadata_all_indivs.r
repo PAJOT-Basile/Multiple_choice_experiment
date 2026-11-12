@@ -260,7 +260,11 @@ full_table <- table_offspring %>%
             by = join_by("Alcool_ID" == "ID_ind0iv")) %>% 
   # Here, we also filter the table to remove individuals whose extraction ID contains
   # "_0" as these are duplicates that were not sequenced
-  filter(!grepl("_0", ID_DNA_RAD))
+  filter(!grepl("_0", ID_DNA_RAD)) %>% 
+  # Here, we add the information for a mother that was not genotyped (as we have
+  # the name of the mother for offspring)
+  mutate(ID_DNA_RAD = case_when(Alcool_ID %in% c("4933", "4958") ~ paste0("E", Alcool_ID),
+                                TRUE ~ ID_DNA_RAD))
 
 # Then, we calculate the sum of the number of setae, for each pereiopod and the 
 # sum per individual. To do that, we need to make sure that the values are comparable.
@@ -395,6 +399,7 @@ full_table <- full_table %>%
   # Add species for individuals that were not in PCA (parents)
   mutate(Species = case_when(Alcool_ID == "4706" ~ Phenotype,
                              Alcool_ID == "4958" ~ "praehirsuta",
+                             Alcool_ID == "4933" ~ "forsmani",
                              is.na(Species) & Sex == "M" & Alcool_ID != "5277" ~ Phenotype,
   # This individual had an intermediate phenotype, but it was fixed dead and not
   # genotyped, so this individual's species cannot be determined by its phenotype.

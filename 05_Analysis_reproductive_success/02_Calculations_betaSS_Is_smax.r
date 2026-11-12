@@ -17,12 +17,13 @@ pacman::p_load(char = libraries, character.only = TRUE)
 ########### Useful variables ###########
 ########################################
 my_theme <- theme_bw() +
-  theme(text = element_text(size = 20))
+  theme(text = element_text(size = 20),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
 
 theme_distrib <- my_theme +
   theme(axis.title = element_blank(),
-        axis.line = element_line(colour = "black"),
-        panel.border = element_blank())
+        axis.line = element_line(colour = "black"))
 
 colours_sexes <- c("Female" = "#D55E00", "Male" = "purple4")
 
@@ -90,6 +91,7 @@ metadata <- read.table("Associated_data/metadata.tsv",
 # Reproductive success
 load("Associated_data/Rdata/Fitness_components_parents.rdata")
 fitness_components <- fitness_components %>%
+  mutate(Sex = ifelse(Sex == "M", "Male", "Female")) %>% 
   group_by(Species, Sex) %>% 
   rename(W1 = nb_partners,
          W12 = nb_offspring,
@@ -143,7 +145,7 @@ Sexual_selection_stats <- fitness_components %>%
 ###### Compute confidence intervals #####
 #########################################
 # distrib_smax_betass_Is <- lapply(c("forsmani", "praehirsuta"), function(species){
-#   lapply(c("M", "F"), function(sex, sp){
+#   lapply(c("Male", "Female"), function(sex, sp){
 #     fitness_components %>%
 #       filter(Sex == sex, Species == sp) %>%
 #       bootstrap_smax_betass_Is(., nboots) %>%
@@ -166,42 +168,52 @@ CI_stats <- distrib_smax_betass_Is %>%
   mutate(across(c(CI_2.5, CI_97.5), ~ case_when(Sex == "F" & Species == "forsmani" & Stat_name %in% c("Beta_SS", "s_max") ~ NA,
                                                 TRUE ~ .))) %>% 
   mutate(Stat_name = factor(Stat_name, levels = c("Beta_SS", "I_s", "s_max"),
-                            labels = c(expression(Beta[SS]),
+                            labels = c(expression(beta[SS]),
                                        expression(I[S]),
-                                       expression("s'"[max] == Beta[SS]~sqrt(I[S])))),
+                                       expression("s'"[max] == beta[SS]~sqrt(I[S])))),
          Species = factor(Species, levels = c("forsmani", "praehirsuta"),
                           labels = c("italic('J. forsmani')", "italic('J. praehirsuta')")))
 
+signif <- distrib_smax_betass_Is %>%
+  pivot_longer(!c(Sex, Species), names_to = "Stat_name", values_to = "Stat_val") %>% 
+  group_by(Sex, Species, Stat_name) %>%
+  proba_different_from_0_with_distribution(Stat_val) %>% 
+  ungroup() %>% 
+  mutate(Signif = case_when(pval < 0.05 & pval >= 0.01 ~ "*",
+                            pval < 0.01 & pval > 0.001 ~ "**",
+                            pval <= 0.001 ~ "***",
+                            TRUE ~ ""))
+
+  
+
 calculated_values <- Sexual_selection_stats %>%
+  select(-pval_beta) %>% 
   pivot_longer(c(Beta_SS, I1, smax), names_to = "Stat_name", values_to = "Stat") %>% 
+  left_join(signif, by = c("Species", "Sex", "Stat_name")) %>%
   mutate(Stat_name = case_when(Stat_name == "I1" ~ "I_s",
                                Stat_name == "smax" ~ "s_max",
                                TRUE ~ Stat_name) %>% 
            factor(levels = c("Beta_SS", "I_s", "s_max"),
-                  labels = c(expression(Beta[SS]),
+                  labels = c(expression(beta[SS]),
                              expression(I[S]),
-                             expression("s'"[max] == Beta[SS]~sqrt(I[S])))),
+                             expression("s'"[max] == beta[SS]~sqrt(I[S])))),
          Species = factor(Species, levels = c("forsmani", "praehirsuta"),
                           labels = c("italic('J. forsmani')", "italic('J. praehirsuta')"))) %>% 
   left_join(CI_stats, by = c("Stat_name", "Sex", "Species")) %>% 
   mutate(Recap = case_when(is.na(Stat) ~ NA,
-                           TRUE ~ paste0(Stat, " [", round(CI_2.5, digits = 2), "; ", round(CI_97.5, digits = 2), "]")),
-         pval_beta = case_when(Stat_name == expression(Beta[SS]) ~ pval_beta,
-                               TRUE ~ NA))
+                           TRUE ~ paste0(Stat, " [", round(CI_2.5, digits = 2), "; ", round(CI_97.5, digits = 2), "]")))
 
 distrib_params <- distrib_smax_betass_Is %>%
   # replace_na(list("Beta_SS" = 0, "I_s" = 0, "s_max" = 0)) %>% 
   pivot_longer(cols = c(Beta_SS, I_s, s_max), names_to = "Stat_name", values_to = "Stat") %>% 
   mutate(Stat_name = factor(Stat_name, levels = c("Beta_SS", "I_s", "s_max"),
-                            labels = c(expression(Beta[SS]),
+                            labels = c(expression(beta[SS]),
                                        expression(I[S]),
-                                       expression("s'"[max] == Beta[SS]~sqrt(I[S])))),
+                                       expression("s'"[max] == beta[SS]~sqrt(I[S])))),
          Species = factor(Species, levels = c("forsmani", "praehirsuta"),
-                          labels = c("italic('J. forsmani')", "italic('J. praehirsuta')")),
-         Sex = ifelse(Sex == "F", "Female", "Male")) %>% 
+                          labels = c("italic('J. forsmani')", "italic('J. praehirsuta')"))) %>% 
   ggplot() +
-  geom_rect(data = CI_stats %>% 
-              mutate(Sex = ifelse(Sex == "F", "Female", "Male")),
+  geom_rect(data = CI_stats,
             aes(xmin = CI_2.5, xmax = CI_97.5, ymin = -Inf, ymax = Inf, fill = Sex), alpha = 0.2) +
   geom_histogram(aes(x = Stat, fill = Sex), bins = 50, alpha = 0.7, position = "identity") +
   geom_vline(data = calculated_values, aes(xintercept = Stat, colour = Sex), lwd = 1, lty = 2) +
@@ -220,76 +232,105 @@ ggsave("../Figures/Suppfigs/Distribution_betaSS_Is_smax.png",
 ########################################
 ########## Bateman's gradient ##########
 ########################################
+mean_W1_ff <- fitness_components %>% 
+  filter(Sex == "Female", Species == "forsmani") %>% 
+  pull(W1) %>% mean(na.rm = TRUE)
+mean_W12_ff <- fitness_components %>% 
+  filter(Sex == "Female", Species == "forsmani") %>% 
+  pull(W12) %>% mean(na.rm = TRUE)
+
+mean_W1_mf <- fitness_components %>% 
+  filter(Sex == "Male", Species == "forsmani") %>% 
+  pull(W1) %>%
+  mean(na.rm = TRUE)
+mean_W12_mf <- fitness_components %>% 
+  filter(Sex == "Male", Species == "forsmani") %>% 
+  pull(W12) %>%
+  mean(na.rm = TRUE)
+
+mean_W1_fp <- fitness_components %>% 
+  filter(Sex == "Female", Species == "praehirsuta") %>% 
+  pull(W1) %>% mean(na.rm = TRUE)
+mean_W12_fp <- fitness_components %>% 
+  filter(Sex == "Female", Species == "praehirsuta") %>% 
+  pull(W12) %>% mean(na.rm = TRUE)
+
+mean_W1_mp <- fitness_components %>% 
+  filter(Sex == "Male", Species == "praehirsuta") %>% 
+  pull(W1) %>%
+  mean(na.rm = TRUE)
+mean_W12_mp <- fitness_components %>% 
+  filter(Sex == "Male", Species == "praehirsuta") %>% 
+  pull(W12) %>%
+  mean(na.rm = TRUE)
+
+
 # Plot bateman's gradient for both sexes of both species
 ff <- fitness_components %>%
   filter(Species == "forsmani",
-         Sex == "F") %>% 
+         Sex == "Female") %>% 
   ggplot(aes(x = w1, y = w12)) +
   geom_point(size = 3, alpha = 0.8, colour = "#3A9AB2") +
   geom_smooth(data = fitness_components %>% 
                 filter(Species == "forsmani", Sex == "Female", w1 > 0),
               colour = "#3A9AB2", method = "lm", se = FALSE) +
-  annotate(geom = "text", x = -Inf, y = Inf, label = "(A)",
-           size = 8, hjust = -.5, vjust = 1.5) +
-  xlim(-0.1, 3) +
-  ylim(-0.107, 4) +
-  labs(y = "Relative fecundity\n(w12)") +
-  my_theme +
-  theme(axis.text.x = element_blank(),
-        axis.ticks.x = element_blank(),
-        axis.title.x = element_blank())
+  scale_x_continuous(sec.axis = sec_axis(~ . * mean_W1_ff, name = ""),
+                     limits = c(-0.1, 3.5)) +
+  scale_y_continuous(sec.axis = sec_axis(~ . * mean_W12_ff, name = ""),
+                     limits = c(-0.107, 4)) +
+  labs(x = "Standardised mating success\n(w1)",
+       y = "Standardiser number of offsrping\n(w12)") +
+  my_theme
 
 fm <- fitness_components %>%
   filter(Species == "forsmani",
-         Sex == "M") %>% 
+         Sex == "Male") %>% 
   ggplot(aes(x = w1, y = w12)) +
   geom_point(size = 3, alpha = 0.8, colour = "#3A9AB2") +
   geom_smooth(data = fitness_components %>% 
                 filter(Species == "forsmani", Sex == "Male", w1 > 0),
               colour = "#3A9AB2", method = "lm", se = FALSE) +
-  annotate(geom = "text", x = -Inf, y = Inf, label = "(B)",
-           size = 8, hjust = -.5, vjust = 1.5) +
-  xlim(-0.1, 3) +
-  ylim(-0.107, 4) +
-  my_theme +
-  theme(axis.text = element_blank(),
-        axis.ticks = element_blank(),
-        axis.title = element_blank())
-
+  scale_x_continuous(sec.axis = sec_axis(~ . * mean_W1_mf, name = ""),
+                     limits = c(-0.1, 3.5)) +
+  scale_y_continuous(sec.axis = sec_axis(~ . * mean_W12_mf, name = ""),
+                     limits = c(-0.107, 4)) +
+  labs(x = "Standardised mating success\n(w1)",
+       y = "Standardiser number of offsrping\n(w12)") +
+  my_theme
 
 pf <- fitness_components %>%
   filter(Species == "praehirsuta",
-         Sex == "F") %>% 
+         Sex == "Female") %>% 
   ggplot(aes(x = w1, y = w12)) +
   geom_point(size = 3, alpha = 0.8, colour = "navy") +
   geom_smooth(data = fitness_components %>% 
                 filter(Species == "praehirsuta", Sex == "Female", w1 > 0),
               colour = "navy", method = "lm", se = FALSE) +
-  annotate(geom = "text", x = -Inf, y = Inf, label = "(C)",
-           size = 8, hjust = -.5, vjust = 1.5) +
-  xlim(-0.1, 3) +
-  ylim(-0.107, 4) +
-  labs(x = "Relative mating success\n(w1)",
-       y = "Relative fecundity\n(w12)") +
+  scale_x_continuous(sec.axis = sec_axis(~ . * mean_W1_fp, name = ""),
+                     limits = c(-0.1, 3.5)) +
+  scale_y_continuous(sec.axis = sec_axis(~ . * mean_W12_fp, name = ""),
+                     limits = c(-0.107, 4)) +
+  labs(x = "Standardised mating success\n(w1)",
+       y = "Standardiser number of offsrping\n(w12)") +
   my_theme
 
 pm <- fitness_components %>%
   filter(Species == "praehirsuta",
-         Sex == "M") %>% 
+         Sex == "Male") %>% 
   ggplot(aes(x = w1, y = w12)) +
   geom_point(size = 3, alpha = 0.8, colour = "navy") +
   geom_smooth(data = fitness_components %>% 
                 filter(Species == "praehirsuta", Sex == "Male", w1 > 0),
               colour = "navy", method = "lm", se = FALSE) +
-  annotate(geom = "text", x = -Inf, y = Inf, label = "(D)",
-           size = 8, hjust = -.5, vjust = 1.5) +
-  xlim(-0.1, 3) +
-  ylim(-0.107, 4) +
-  labs(x = "Relative mating success\n(w1)") +
-  my_theme +
-  theme(axis.title.y = element_blank(),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank())
+  scale_x_continuous(sec.axis = sec_axis(~ . * mean_W1_mp, name = ""),
+                     limits = c(-0.1, 3.5)) +
+  scale_y_continuous(sec.axis = sec_axis(~ . * mean_W12_mp, name = ""),
+                     limits = c(-0.107, 4)) +
+  labs(x = "Standardised mating success\n(w1)",
+       y = "Standardiser number of offsrping\n(w12)") +
+  my_theme
+
+
 
 
 
@@ -297,84 +338,98 @@ pm <- fitness_components %>%
 # Plot the marginal distributions for each fitness component
 distrib_w1_ff <- fitness_components %>%
   filter(Species == "forsmani",
-         Sex == "F") %>% 
+         Sex == "Female") %>% 
   ggplot(aes(x = W1)) +
   geom_histogram(fill = "#3A9AB2") +
-  xlim(-0.1, 3) +
+  xlim(-0.1, 3.35) +
   scale_y_continuous(n.breaks = 3) +
-  theme_distrib
+  labs(x = "Mating success (W1)") +
+  theme_distrib +
+  theme(axis.title.x = element_text(vjust = -3))
 
-distrib_w1_fm <- fitness_components%>%
+distrib_w1_fm <- fitness_components %>%
   filter(Species == "forsmani",
-         Sex == "M") %>% 
+         Sex == "Male") %>% 
   ggplot(aes(x = W1)) +
   geom_histogram(fill = "#3A9AB2") +
-  xlim(-0.1, 3) +
+  xlim(-0.1, 3.3) +
   scale_y_continuous(n.breaks = 3) +
-  theme_distrib
+  labs(x = "Mating success (W1)") +
+  theme_distrib +
+  theme(axis.title.x = element_text(vjust = -3))
 
 distrib_w1_pf <- fitness_components %>%
   filter(Species == "praehirsuta",
-         Sex == "F") %>% 
+         Sex == "Female") %>% 
   ggplot(aes(x = W1)) +
   geom_histogram(fill = "navy") +
-  xlim(-0.1, 3) +
+  xlim(-0.1, 3.8) +
   scale_y_continuous(n.breaks = 3) +
-  theme_distrib
-
+  labs(x = "Mating success (W1)") +
+  theme_distrib +
+  theme(axis.title.x = element_text(vjust = -3))
 
 distrib_w1_pm <- fitness_components %>%
   filter(Species == "praehirsuta",
-         Sex == "M") %>% 
+         Sex == "Male") %>% 
   ggplot(aes(x = W1)) +
   geom_histogram(fill = "navy") +
-  xlim(-0.1, 3) +
+  xlim(-0.1, 3.8) +
   scale_y_continuous(n.breaks = 3) +
-  theme_distrib
+  labs(x = "Mating success (W1)") +
+  theme_distrib +
+  theme(axis.title.x = element_text(vjust = -3))
+
 
 distrib_w12_ff <- fitness_components %>%
   filter(Species == "forsmani",
-         Sex == "F") %>% 
+         Sex == "Female") %>% 
   ggplot(aes(y = W12)) +
   geom_histogram(fill = "#3A9AB2") +
   ylim(-2, 75) +
   scale_x_continuous(n.breaks = 3) +
-  theme_distrib
+  labs(y = "Number of offspring (W12)") +
+  theme_distrib +
+  theme(axis.title.y = element_text(vjust = 5))
 
 distrib_w12_fm <- fitness_components %>%
   filter(Species == "forsmani",
-         Sex == "M") %>% 
+         Sex == "Male") %>% 
   ggplot(aes(y = W12)) +
   geom_histogram(fill = "#3A9AB2") +
-  ylim(-2, 75) +
+  ylim(-2, 78) +
   scale_x_continuous(n.breaks = 3) +
-  theme_distrib
+  labs(y = "Number of offspring (W12)") +
+  theme_distrib +
+  theme(axis.title.y = element_text(vjust = 5))
 
 distrib_w12_pf <- fitness_components %>%
   filter(Species == "praehirsuta",
-         Sex == "F") %>% 
+         Sex == "Female") %>% 
   ggplot(aes(y = W12)) +
   geom_histogram(fill = "navy") +
-  ylim(-2, 75) +
-  scale_x_continuous(n.breaks = 3) +
-  theme_distrib
-
+  ylim(-2, 78) +
+  scale_x_continuous(n.breaks = 3, , labels = function(x){sprintf("%.0f", x)}) +
+  labs(y = "Number of offspring (W12)") +
+  theme_distrib +
+  theme(axis.title.y = element_text(vjust = 5))
 
 distrib_w12_pm <- fitness_components %>%
   filter(Species == "praehirsuta",
-         Sex == "M") %>% 
+         Sex == "Male") %>% 
   ggplot(aes(y = W12)) +
   geom_histogram(fill = "navy") +
-  ylim(-2, 75) +
+  ylim(-2, 78) +
   scale_x_continuous(n.breaks = 3) +
-  theme_distrib
-
+  labs(y = "Number of offspring (W12)") +
+  theme_distrib +
+  theme(axis.title.y = element_text(vjust = 5))
 
 
 # Prepare the annotations
 ann1 <- ggplot() +
   geom_text(aes(x = 0, y = 0, label = "bold(Females)"),
-            parse = TRUE, size = 6, hjust = 0.1) +
+            parse = TRUE, size = 6, hjust = 0.75) +
   theme_void()
 ann2 <- ggplot() +
   geom_text(aes(x = 0, y = 0, label = "bold(Males)"),
@@ -390,24 +445,47 @@ ann4 <- ggplot() +
             parse = TRUE, size = 6, hjust = 0.5, angle = 90) +
   theme_void()
 
+ann5 <- ggplot() +
+  geom_text(aes(x = 0, y = 0, label = "bold('(A)')"),
+            parse = TRUE, size = 10) +
+  theme_void()
+
+ann6 <- ggplot() +
+  geom_text(aes(x = 0, y = 0, label = "bold('(B)')"),
+            parse = TRUE, size = 10) +
+  theme_void()
+
+ann7 <- ggplot() +
+  geom_text(aes(x = 0, y = 0, label = "bold('(C)')"),
+            parse = TRUE, size = 10) +
+  theme_void()
+
+ann8 <- ggplot() +
+  geom_text(aes(x = 0, y = 0, label = "bold('(D)')"),
+            parse = TRUE, size = 10) +
+  theme_void()
+
 
 # Plot everything together
 design <- "
-#A#B#
-#C#D#
-EFGHI
-#J#K#
-LMNOP
+#A#B#C#
+DE#BFG#
+HIJB#KL
+###B###
+MN#BOP#
+QRSB#TU
 "
 
-final_figure <- ann1 + ann2 + 
-  distrib_w1_ff + distrib_w1_fm + 
+final_figure <- ann1 + plot_spacer() + ann2 + 
+  ann5 + distrib_w1_ff + ann6 + distrib_w1_fm + 
   ann3 + ff + distrib_w12_ff + fm + distrib_w12_fm +
-  distrib_w1_pf + distrib_w1_pm +
+  ann7 + distrib_w1_pf + ann8 + distrib_w1_pm +
   ann4 + pf + distrib_w12_pf + pm + distrib_w12_pm +
   plot_layout(design = design,
-              widths = c(0.1, 1, 0.15, 1, 0.15),
-              heights = c(0.1, 0.2, 1, 0.2, 1))
+              widths = c(0.1, 1, 0.1, 0.15, 0.15, 1, 0.15),
+              heights = c(0.1, 0.2, 1, 0.2, 0.2, 1))
 
 final_figure
-ggsave(plot = final_figure, "../Figures/Distribution_reproductive_success.png", scale = 4, width = 1200, height = 1100, units = "px")
+ggsave(plot = final_figure, "../Figures/Distribution_reproductive_success.png",
+       scale = 4, width = 1600, height = 1500, units = "px")
+

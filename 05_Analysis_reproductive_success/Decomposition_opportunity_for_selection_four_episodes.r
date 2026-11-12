@@ -120,12 +120,6 @@ metadata <- read.table("Associated_data/metadata.tsv",
 # Reproductive success
 load("Associated_data/Rdata/Fitness_components_parents.rdata")
 fitness_components <- fitness_components %>% 
-  left_join(metadata %>%
-              select(ID_DNA_RAD, Size),
-            by = join_by("Parent_ID" == "ID_DNA_RAD")) %>% 
-  # Here, we remove the female that had one offspring that was not genotyped
-  filter(Parent_ID != "E4961") %>% 
-  drop_na() %>% 
   group_by(Species, Sex) %>% 
   rename(W1 = nb_partners,
          W12 = max_nb_offspring,
@@ -218,11 +212,28 @@ save(distrib_variances, file = "Associated_data/Rdata/distribution_variances_500
 load("Associated_data/Rdata/distribution_variances_50000_boots_four_episodes.rda")
 
 
+signif <- distrib_variances %>%
+  pivot_longer(!c(Sex, Species), names_to = "Stat_name", values_to = "Stat_val") %>% 
+  group_by(Sex, Species, Stat_name) %>%
+  summarize(nb_inf_0 = sum(Stat_val < 0, na.rm = TRUE),
+            nb_sup_0 = sum(Stat_val > 0, na.rm = TRUE),
+            nvals = n() - sum(is.na(Stat_val)),
+            pval = case_when(nb_inf_0 > nb_sup_0 ~ nb_sup_0 / nvals,
+                             nb_inf_0 < nb_sup_0 ~ nb_inf_0 / nvals,
+                             TRUE ~ NA)) %>% 
+  ungroup() %>% 
+  select(-c(nb_inf_0, nvals, nb_sup_0)) %>% 
+  mutate(Signif = case_when(pval < 0.05 & pval >= 0.01 ~ "*",
+                            pval < 0.01 & pval > 0.001 ~ "**",
+                            pval <= 0.001 ~ "***",
+                            TRUE ~ ""))
+
 CI_stats <- distrib_variances %>% 
   pivot_longer(cols = !c(Sex, Species), names_to = "Stat_name", values_to = "Stat") %>% 
   group_by(Species, Sex, Stat_name) %>% 
   summarize(CI_2.5 = quantile(Stat, probs = 0.025),
-            CI_97.5 = quantile(Stat, probs = 0.975))
+            CI_97.5 = quantile(Stat, probs = 0.975)) %>% 
+  left_join(signif, by = c("Sex" , "Species", "Stat_name"))
 
 ##############################################################
 ######### Look at the values to fill up supp table 1 #########
@@ -240,7 +251,7 @@ I_vals %>%
               mutate(Stat_name = str_split_fixed(Stat_name, "_", 2)[, 2]),
             by = c("Species", "Sex", "Stat_name")) %>% 
   rowwise() %>% 
-  mutate(CI = paste0("[", round(CI_2.5, digits = 2), "; ", round(CI_97.5, digits = 2), "]")) %>% 
-  select(-c(CI_2.5, CI_97.5)) %>% 
-  relocate(Percentage, .after = CI) %>% 
-  filter(Stat_name == "I2") 
+  mutate(Recap = paste0(Stat, " [", round(CI_2.5, digits = 2), "; ", round(CI_97.5, digits = 2), "] (pval = ", pval, "; ", Signif, ")")) %>% 
+  select(-c(Stat, pval, Signif, CI_2.5, CI_97.5)) %>% 
+  relocate(Percentage, .after = Recap) %>% 
+  filter(Stat_name == "I1")

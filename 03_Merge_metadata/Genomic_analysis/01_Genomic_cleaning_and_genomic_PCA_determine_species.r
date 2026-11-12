@@ -83,6 +83,7 @@ load("Associated_data/Rdata/Families_first_brood.rdata")
 #########################################################
 ######################## Run PCA ########################
 #########################################################
+# TODO: faire ACP sur moins SNPs qui sont connservés chez tout le monde
 # The PCA will only be used to identify the species of the mothers (female parents)
 # that were put in the aquarium. So, the PCA has to be run only on the parents
 ## Subset the genind to keep only the parents
@@ -115,6 +116,10 @@ pca_plot <- pca$li %>%
            factor(levels = c("Males forsmani", "Males praehirsuta", "Females"))) %>%
   ggplot(aes(x = Axis1, y = Axis2, colour = Sex_pheno, shape = Sex_pheno)) +
   geom_point(size = 3, alpha = 0.7) +
+  geom_point(data = . %>% 
+               filter(ID_DNA_RAD %in% c("E4958")),
+             aes(x = Axis1, y = Axis2,  shape = Sex_pheno),
+             size = 3, alpha = 0.7, colour = "red") +
   scale_colour_manual(name = "Sex and\nPhenotype",
                       values = c("Males forsmani" = "#3A9AB2",
                                  "Males praehirsuta" = "navy",
@@ -128,8 +133,8 @@ pca_plot <- pca$li %>%
   my_theme
 
 pca_plot
-ggsave("../Figures/Suppfigs/PCA_parents.png", pca_plot,
-       scale = 4, width = 1200, height = 800, units = "px")
+# ggsave("../Figures/Suppfigs/PCA_parents.png", pca_plot,
+       # scale = 4, width = 1200, height = 800, units = "px")
 
 # The first axis of the PCA clearly separates the two species. To make sure that
 # the identification of the species of female parents, we use the function find.clusters

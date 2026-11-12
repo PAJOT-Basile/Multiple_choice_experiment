@@ -46,6 +46,58 @@ str_split_last <- function(string, pattern){
 }
 
 #################################
+####### Stat functions ##########
+#################################
+generalised_t.test <- function(x){
+  if (sum(is.na(x)) == length(x)){
+    pval <- NA
+  }else{
+    pval <- t.test(x)$p.value
+  }
+  return(pval)
+}
+
+proba_different_from_0_with_distribution <- function(df, distrib){
+  #' Compute probability of being different from 0 with a distribution
+  #' 
+  #' @description
+    #' Using a distribution, this function first computes the mean of the distribution.
+    #' Then, if the mean is positive, the probability of the calculated value
+    #' being different from 0 is the number of values in the distribution that are 
+    #' smaller or equal to 0 divided by the total number of values in the distribution.
+    #' In the same way, for negative mean values, the probability that this value
+    #' is not different from zero is the number of positive values divided by the
+    #' number of values in the distribution.
+  #' 
+  #' @param df Data frame. This data frame should contain the distribution
+  #' of a value in a column that is given in the `distrib` parameter. This data
+  #' frame can be grouped if several distributions are to be handled.
+  #' @param distrib Name of a column in the `df` data frame that contains the 
+  #' distribution to be handled.
+  #' 
+  #' @returns A data frame containing a pval column in which the probability of
+  #' the value being different from 0 is given.
+  #' 
+  #' @examples
+    #' df_test <- data.frame("Group_column" = "Distrib1",
+    #'                       "Distribution" = rnorm(1000, 1, 1))
+    #' proba_different_from_0_with_distribution(df_test, Distribution)
+    #' 
+  distrib <- as.name(substitute(distrib))
+  
+  df %>% 
+    summarize(mean_val = mean(!!sym(distrib), na.rm = TRUE),
+              n_sup_0 = sum(!!sym(distrib) >= 0, na.rm = TRUE),
+              n_inf_0 = sum(!!sym(distrib) <= 0, na.rm = TRUE),
+              nval = n() - sum(is.na(!!sym(distrib)))) %>% 
+    mutate(pval = case_when(mean_val > 0 ~ n_inf_0 / nval,
+                            mean_val < 0 ~ n_sup_0 / nval,
+                            mean_val == 0 ~ 1)) %>% 
+    select(-c(mean_val, n_sup_0, n_inf_0, nval)) %>% 
+    return()
+}
+
+#################################
 ###### Summary functions ########
 #################################
 Get_chromosome_summary_information <- function(chromosome_recap){

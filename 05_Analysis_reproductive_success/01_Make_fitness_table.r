@@ -114,7 +114,19 @@ Families_first_brood <- Families %>%
   filter(Plate_nb <= max_brood_nb & Plate_nb >= min_brood_nb) %>% 
   # And we clean up the table
   rename(nb_tot_juvs = nb_tot_juv_brood1) %>% 
-  select(-c(ends_with("brood_nb"), Label, Plate_nb))
+  select(-c(ends_with("brood_nb"), Label, Plate_nb)) %>% 
+  # Here, we add the brood of a female that had an offspring, but the offspring 
+  # did not survive (and was not genotyped)
+  rbind(metadata %>% 
+          filter(ID_DNA_RAD == "E4961") %>% 
+          select(ID_DNA_RAD, nb_tot_juv_brood1, Name_offsprings_brood1) %>% 
+          rename(Mom = ID_DNA_RAD,
+                 nb_tot_juvs = nb_tot_juv_brood1,
+                 Brood_name = Name_offsprings_brood1) %>% 
+          # As the offspring died before 60 days, it was not genotyped, it does
+          # not have a genotyping id and as it was not genotyped, it's father was
+          # not identified with COLONY.
+          mutate(Offspring = NA, Dad = NA))
 
 
 save(Families_first_brood, file = "Associated_data/Rdata/Families_first_brood.rdata")
@@ -142,7 +154,8 @@ Contribution_of_dad_to_broods <- Families_first_brood %>%
   left_join(Brood_sizes,
             by = "Brood_name") %>% 
   mutate(Contribution = nb_offspring_sired_per_brood / seq_indivs) %>% 
-  select(Dad, Brood_name, Contribution)
+  select(Dad, Brood_name, Contribution) %>% 
+  drop_na()
 
   
 # Finally, we need to combine the variables (number of offspring, contribution
@@ -198,7 +211,10 @@ fitness_components_males <- survival %>%
   # them.
   mutate(across(!c(Dad, Species, Sex), ~ case_when(is.na(.) ~ 0,
                                   TRUE ~ .))) %>% 
-  rename(Parent_ID = Dad)
+  rename(Parent_ID = Dad) %>% 
+  # Two males died during the 11 day free-interaction period in the aquarium,
+  # we thus remove them from our analysis.
+  filter(Parent_ID %not_in% c("E4705", "E4706"))
 
 # Once this is done, we do the same for the females
 fitness_components_females <- survival %>%
@@ -229,9 +245,9 @@ fitness_components_females <- survival %>%
   #   4. The total number of sired offspring alive at n days
             nb_offspring_surv40 = sum(unique(nb_offspring_alive_40), na.rm = TRUE),
             nb_offspring_surv60 = sum(unique(nb_offspring_alive_60), na.rm = TRUE)) %>% 
-  # In the previous table, all the male parents that were added to the aquarium are
+  # In the previous table, all the female parents that were added to the aquarium are
   # not found as some of them did not have any offspring. However, the fitness of
-  # these males does exist and it is 0 for all the above fitness components, so we
+  # these females does exist and it is 0 for all the above fitness components, so we
   # add them to the table.
   right_join(metadata %>% 
                filter(Family_level == "parents",
@@ -243,12 +259,7 @@ fitness_components_females <- survival %>%
   # them.
   mutate(across(!c(Mom, Species, Sex), ~ case_when(is.na(.) ~ 0,
                                   TRUE ~ .))) %>% 
-  rename(Parent_ID = Mom) %>% 
-  # Here, one female had an offspring that did not survive 40 days and was not
-  # genotyped. We thus know this female reproduced with a male, but we do not
-  # know which male it reproduced with. We thus chose to remove this female from
-  # the analyses
-  filter(Parent_ID != "E4961")
+  rename(Parent_ID = Mom)
   
 
 
