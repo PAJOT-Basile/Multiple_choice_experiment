@@ -54,9 +54,6 @@ rsconnect/
 01_Raw_data_processing/*/slurm*
 01_Raw_data_processing/*/C*
 
-# Vcf2colony
-04_Prepare_Colony_input/
-
 # Data
 Associated_data/
 
