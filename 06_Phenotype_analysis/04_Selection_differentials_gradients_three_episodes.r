@@ -439,7 +439,7 @@ plot_heatmap_var_covar <- function(df, traits){
   return(p)
 }
 
-plot_phenotype_fitness_regression <- function(df, phenotype, fitness){
+plot_phenotype_fitness_regression <- function(df, phenotype, fitness, sp){
   fitness_onset <- c("b4" = ifelse(fitness %in% c("w12", "w123", "W12", "W123"), 0, as.numeric(str_split_fixed(fitness, "", 2)[, 2]) - 1),
                      "after" = as.numeric(str_split_last(fitness, "")))
 
@@ -500,10 +500,16 @@ plot_phenotype_fitness_regression <- function(df, phenotype, fitness){
     geom_vline(aes(xintercept = sum(!!sym(phenotypes["after"]), na.rm = TRUE)),
                colour = "grey40", lwd = 1.1) +
     geom_smooth(aes(x = !!sym(phenotype), y = !!sym(fitness)), method = "lm",
-                se = FALSE, colour = "grey40", lty = "dashed") +
-    geom_smooth(aes(x = !!sym(phenotype), y = !!sym(fitness)), method = "lm",
-                se = FALSE, colour = "grey40", formula = y ~ poly(x, degree = 2),
-                lty = "dotted") +
+                se = FALSE, colour = "grey40", lty = "dashed")
+  
+  
+  if ((phenotype == "Size") | (sp == "praehirsuta" & phenotype == "Sum_curved_setaeP1P5_default")){
+    p <- p +
+      geom_smooth(aes(x = !!sym(phenotype), y = !!sym(fitness)), method = "lm",
+                  se = FALSE, colour = "grey40", formula = y ~ poly(x, degree = 2),
+                  lty = "dotted")
+  }
+  p <- p +
     annotate("segment", x = start_arrow, xend = end_arrow, y = height_arrow,
              arrow = arrow(length = unit(0.5, "cm")), lwd = 1.1) +
     # annotate("text", x = Inf, y = Inf, label = lab,
@@ -532,7 +538,7 @@ save_plot_regression <- function(df, sex, species, pheno, fitness){
   
   p <- df %>% 
     filter(Sex == sex, Species == species) %>% 
-    plot_phenotype_fitness_regression(pheno, fitness) +
+    plot_phenotype_fitness_regression(pheno, fitness, species) +
     geom_hline(yintercept = 0, colour = "black", lwd = 1) +
     labs(
       x = x_text,
@@ -857,7 +863,8 @@ ggsave(plot = var_covar_plot_std, "../Figures/tmp/Standardised_traits/Variance_c
 #   Sum_spinesP6P7
 fitness_components %>% 
   filter(Sex == "Male", Species == "praehirsuta") %>% 
-  ggplot(aes(x = Size, y = W1, colour = Species)) +
+  mutate(Setae_per_mm = Sum_curved_setaeP1P5_default / Size) %>% 
+  ggplot(aes(x = Setae_per_mm, y = W1, colour = Species)) +
   geom_point(colour = "black", alpha = 0.5, size = 3) +
   geom_smooth(colour = "grey40", method = "lm", lty = "dashed", se = FALSE) +
   geom_smooth(colour = "blue", method = "lm", formula = y ~ poly(x, degree = 2), se = FALSE) +
@@ -865,7 +872,7 @@ fitness_components %>%
 
 
 fitness_components %>% 
-  filter(Sex == "Male", Species == "praehirsuta") %>% 
+  filter(Sex == "Male", Species == "praehirsuta") %>%
   lm(data = ., w1 ~ Size + I(Size^2)) %>%
   # lm(data = ., w1 ~ Size) %>% 
   AIC()
@@ -873,7 +880,9 @@ fitness_components %>%
 
 fitness_components %>% 
   filter(Sex == "Male", Species == "praehirsuta") %>% 
-  plot_phenotype_fitness_regression("Size", "w2")
+  mutate(Setae_per_mm = Sum_curved_setaeP1P5_default / Size) %>%
+  # filter(Setae_per_mm < 100) %>%
+  plot_phenotype_fitness_regression("Setae_per_mm", "W3", "praehirsuta")
 
 
 fitness_components %>% 
@@ -884,7 +893,7 @@ fitness_components %>%
   my_theme
 
 
-save_plot_regression(fitness_components, "Male", "praehirsuta", "Sum_spinesP6P7", "w3")
+save_plot_regression(fitness_components, "Male", "forsmani", "Size", "w1")
   
 
 
@@ -894,16 +903,6 @@ plot_figure_trait_fitness_differentials <- function(s_values, fitness_components
     filter(Species == species, Sex == sex,
            Trait1 == trait,
            grepl("S", Stat_name)) %>% 
-    pivot_longer(cols = contains("CI_"), names_to = "CI", values_to = "CI_val") %>% 
-    pull(CI_val) %>% 
-    abs() %>% 
-    max(na.rm = TRUE)
-  
-  xmac <- s_values %>%
-    filter(Species == species, Sex == sex,
-           Trait1 == trait,
-           Trait2 == trait,
-           grepl("C", Stat_name)) %>% 
     pivot_longer(cols = contains("CI_"), names_to = "CI", values_to = "CI_val") %>% 
     pull(CI_val) %>% 
     abs() %>% 
@@ -938,35 +937,6 @@ plot_figure_trait_fitness_differentials <- function(s_values, fitness_components
           panel.grid.major = element_blank(),
           panel.grid.minor = element_blank())
   
-  selection_differentials_c <- s_values %>%
-    mutate(Onset = factor(Onset, levels = c("123\nReproductive success", "3\nOffspring survival",
-                                            "12\nNumber of offspring", "2\nNumber of offspring\nper mate",
-                                            "1\nMating success"))) %>% 
-    filter(Species == species, Sex == sex,
-           Trait1 == trait,
-           Trait2 == trait,
-           grepl("C", Stat_name)) %>% 
-    ggplot() +
-    geom_vline(aes(xintercept = 0), colour = "black", lwd = 0.9, lty = "dashed") +
-    geom_linerange(aes(xmin = CI_2.5, xmax = CI_97.5, y = Onset)) +
-    geom_point(aes(x = Stat_value, y = Onset, fill = Species), size = 5,
-               show.legend = TRUE, colour = "black", pch = 21) +
-    geom_text(aes(x = ifelse(abs(CI_97.5) > abs(CI_2.5), CI_97.5, CI_2.5),
-                  y = Onset, label = Signif), size = 10, vjust = -0.5) +
-    scale_fill_manual(values = c("J. praehirsuta" = "navy", "J. forsmani" = "#3A9AB2"),
-                      guide = "none") +
-    labs(x = "Non-linear\nselection differentials") +
-    xlim(-xmac, xmac) +
-    my_theme +
-    theme(legend.text = element_text(face = "italic"),
-          axis.text.y = element_blank(),
-          axis.title.y = element_blank(),
-          axis.text.x = element_text(size = 18),
-          axis.title.x = element_text(size = 20),
-          axis.ticks.length.x = unit(1, "mm"),
-          panel.background = element_blank(),
-          panel.grid.major = element_blank(),
-          panel.grid.minor = element_blank())
   
   sp <- str_remove_all(species, "J. ")
   tr <- case_when(trait == "Size\n(mm)" ~ "Size",
@@ -988,7 +958,7 @@ plot_figure_trait_fitness_differentials <- function(s_values, fitness_components
   
   w1_trait <- fitness_components %>%
     filter(Sex == sex, Species == sp) %>% 
-    plot_phenotype_fitness_regression(tr, "w1") +
+    plot_phenotype_fitness_regression(tr, "w1", sp) +
     scale_y_continuous(limits = c(0, NA)) +
     scale_x_continuous(limits = c(xmin_trait, xmax_trait)) +
     labs(y = "w1\nRelative mating success",
@@ -1001,7 +971,7 @@ plot_figure_trait_fitness_differentials <- function(s_values, fitness_components
   w2_trait <- fitness_components %>%
     filter(Sex == sex, Species == sp,
            W1 != 0) %>% 
-    plot_phenotype_fitness_regression(tr, "w2") +
+    plot_phenotype_fitness_regression(tr, "w2", sp) +
     scale_y_continuous(limits = c(0, NA)) +
     scale_x_continuous(limits = c(xmin_trait, xmax_trait)) +
     labs(y = "w2\nRelative number of offspring per mate") +
@@ -1011,7 +981,7 @@ plot_figure_trait_fitness_differentials <- function(s_values, fitness_components
   
   w12_trait <- fitness_components %>%
     filter(Sex == sex, Species == sp) %>% 
-    plot_phenotype_fitness_regression(tr, "w12") +
+    plot_phenotype_fitness_regression(tr, "w12", sp) +
     scale_y_continuous(limits = c(0, NA)) +
     scale_x_continuous(limits = c(xmin_trait, xmax_trait)) +
     labs(y = "w12\nRelative number of offspring") +
@@ -1022,7 +992,7 @@ plot_figure_trait_fitness_differentials <- function(s_values, fitness_components
   w3_trait <- fitness_components %>%
     filter(Sex == sex, Species == sp,
            W2 != 0) %>% 
-    plot_phenotype_fitness_regression(tr, "w3") +
+    plot_phenotype_fitness_regression(tr, "w3", sp) +
     scale_y_continuous(limits = c(0, NA)) +
     scale_x_continuous(limits = c(xmin_trait, xmax_trait)) +
     labs(y = "w3\nRelative offspring survival") +
@@ -1032,7 +1002,7 @@ plot_figure_trait_fitness_differentials <- function(s_values, fitness_components
   
   w123_trait <- fitness_components %>%
     filter(Sex == sex, Species == sp) %>% 
-    plot_phenotype_fitness_regression(tr, "w123") +
+    plot_phenotype_fitness_regression(tr, "w123", sp) +
     scale_y_continuous(limits = c(0, NA)) +
     scale_x_continuous(limits = c(xmin_trait, xmax_trait)) +
     labs(y = "w123\nRelative reproductive success",
@@ -1049,24 +1019,82 @@ plot_figure_trait_fitness_differentials <- function(s_values, fitness_components
     geom_text(aes(x = 0, y = 0), label = text_annotation,
               parse = TRUE, size = 8, vjust = 1) +
     theme_void() 
+  
+  plot_list <- list(ann1,
+                    w1_trait,
+                    w2_trait,
+                    w12_trait,
+                    w3_trait,
+                    w123_trait, selection_differentials_s)
+  
+  plot_layout_design <- "AA
+              BG
+              CG
+              DG
+              EG
+              FG"
+  
+  widths_layout <- c(0.85, 0.25)
+  heights_layout <- c(0.15, 1, 1, 1, 1, 1)
     
   
+  if ((species == "J. forsmani" & trait == "Size\n(mm)") | (species == "J. praehirsuta" & trait %in% c("Size\n(mm)", "Sum of curved\nsetae"))){
+    xmac <- s_values %>%
+      filter(Species == species, Sex == sex,
+             Trait1 == trait,
+             Trait2 == trait,
+             grepl("C", Stat_name)) %>% 
+      pivot_longer(cols = contains("CI_"), names_to = "CI", values_to = "CI_val") %>% 
+      pull(CI_val) %>% 
+      abs() %>% 
+      max(na.rm = TRUE)
+    
+    selection_differentials_c <- s_values %>%
+      mutate(Onset = factor(Onset, levels = c("123\nReproductive success", "3\nOffspring survival",
+                                              "12\nNumber of offspring", "2\nNumber of offspring\nper mate",
+                                              "1\nMating success"))) %>% 
+      filter(Species == species, Sex == sex,
+             Trait1 == trait,
+             Trait2 == trait,
+             grepl("C", Stat_name)) %>% 
+      ggplot() +
+      geom_vline(aes(xintercept = 0), colour = "black", lwd = 0.9, lty = "dashed") +
+      geom_linerange(aes(xmin = CI_2.5, xmax = CI_97.5, y = Onset)) +
+      geom_point(aes(x = Stat_value, y = Onset, fill = Species), size = 5,
+                 show.legend = TRUE, colour = "black", pch = 21) +
+      geom_text(aes(x = ifelse(abs(CI_97.5) > abs(CI_2.5), CI_97.5, CI_2.5),
+                    y = Onset, label = Signif), size = 10, vjust = -0.5) +
+      scale_fill_manual(values = c("J. praehirsuta" = "navy", "J. forsmani" = "#3A9AB2"),
+                        guide = "none") +
+      labs(x = "Non-linear\nselection differentials") +
+      xlim(-xmac, xmac) +
+      my_theme +
+      theme(legend.text = element_text(face = "italic"),
+            axis.text.y = element_blank(),
+            axis.title.y = element_blank(),
+            axis.text.x = element_text(size = 18),
+            axis.title.x = element_text(size = 20),
+            axis.ticks.length.x = unit(1, "mm"),
+            panel.background = element_blank(),
+            panel.grid.major = element_blank(),
+            panel.grid.minor = element_blank())
+    
+    plot_list[[length(plot_list) + 1]] <- selection_differentials_c
+    plot_layout_design <- "AAA
+              BGH
+              CGH
+              DGH
+              EGH
+              FGH"
+    
+    widths_layout <- c(0.85, 0.25, 0.25)
+
+  }
   
-  trait_fitness_plot <- ann1 +
-    w1_trait + selection_differentials_s + selection_differentials_c +
-    w2_trait + 
-    w12_trait +
-    w3_trait + 
-    w123_trait +
-    plot_layout(design = "
-              AAA
-              BCD
-              ECD
-              FCD
-              GCD
-              HCD",
-                widths = c(0.85, 0.25, 0.25),
-                heights = c(0.15, 1, 1, 1, 1, 1))
+  trait_fitness_plot <- wrap_plots(plot_list) +
+    plot_layout(design = plot_layout_design,
+                widths = widths_layout,
+                heights = heights_layout)
   
   return(trait_fitness_plot)
   
@@ -1081,7 +1109,7 @@ plot_figure_trait_fitness_differentials(s_values = selection_differentials_gradi
                                         fitness_components = fitness_components,
                                         species = "J. praehirsuta",
                                         sex = "Male",
-                                        trait = "Sum of curved\nsetae")
+                                        trait = "Size\n(mm)")
 
 size_male_forsmani <- plot_figure_trait_fitness_differentials(s_values = selection_differentials_gradients,
                                                               fitness_components = fitness_components,
@@ -1116,6 +1144,48 @@ praehirsuta_plot_s <- ggarrange(size_female_prae, setae_male_prae,
 ggsave(praehirsuta_plot_s, 
        filename = "../Figures/Selection_differentials_with_plots_praehirsuta.png",
        scale = 4, height = 1800, width = 2600, units = "px")
+
+
+size_male_prae <- plot_figure_trait_fitness_differentials(s_values = selection_differentials_gradients,
+                                                          fitness_components = fitness_components,
+                                                          species = "J. praehirsuta",
+                                                          sex = "Male",
+                                                          trait = "Size\n(mm)")
+
+ggsave(size_male_prae, 
+       filename = "../Figures/Suppfigs/Selection_differentials_with_plots_size_male_praehirsuta.png",
+       scale = 4, height = 1800, width = 1400, units = "px")
+
+
+spines_male_prae <- plot_figure_trait_fitness_differentials(s_values = selection_differentials_gradients,
+                                                            fitness_components = fitness_components,
+                                                            species = "J. praehirsuta",
+                                                            sex = "Male",
+                                                            trait = "Sum of spines\n")
+
+ggsave(spines_male_prae, 
+       filename = "../Figures/Suppfigs/Selection_differentials_with_plots_spines_male_praehirsuta.png",
+       scale = 4, height = 1800, width = 1400, units = "px")
+
+size_female_forsmani <- plot_figure_trait_fitness_differentials(s_values = selection_differentials_gradients,
+                                                                fitness_components = fitness_components,
+                                                                species = "J. forsmani",
+                                                                sex = "Female",
+                                                                trait = "Size\n(mm)")
+
+ggsave(size_female_forsmani, 
+       filename = "../Figures/Suppfigs/Selection_differentials_with_plots_size_female_forsmani.png",
+       scale = 4, height = 1800, width = 1400, units = "px")
+
+setae_male_forsmani <- plot_figure_trait_fitness_differentials(s_values = selection_differentials_gradients,
+                                                                fitness_components = fitness_components,
+                                                                species = "J. forsmani",
+                                                                sex = "Male",
+                                                                trait = "Sum of curved\nsetae")
+
+ggsave(setae_male_forsmani, 
+       filename = "../Figures/Suppfigs/Selection_differentials_with_plots_setae_male_forsmani.png",
+       scale = 4, height = 1800, width = 1400, units = "px")
 
 
 ######################## Test Multivariate normal distribution of traits ########################

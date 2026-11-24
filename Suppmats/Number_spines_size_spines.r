@@ -1,11 +1,14 @@
-#' This script is written to look at the correlation of size with the other traits
-#' studied here (the total number of spines and the total number of sexual setae)
+#' This script is written to look at the number of spines of different sizes and 
+#' the correlation with the size of the males.
+#' 
+#' Basile Pajot
+#' Last updated: 17/11/2026
 
 
 ########################################################
 ####################### Libraries ######################
 ########################################################
-libraries <- c("tidyverse")
+libraries <- c("tidyverse", "ggh4x")
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(char = libraries, character.only = TRUE)
 
@@ -40,35 +43,40 @@ metadata <- read.table("Associated_data/metadata.tsv",
   mutate(across(c(Size, starts_with("Sum_")), ~ (. - mean(., na.rm = TRUE)) / sd(., na.rm = TRUE), .names = "St_{col}")) %>% 
   ungroup()
 
-
 ########################################################
 ###################### Plot data #######################
 ########################################################
-size_trait_relationship <- metadata %>% 
+size_spine_size_indiv <- metadata %>% 
   filter(Sex == "M") %>% 
-  select(ID_DNA_RAD, Species, Sex, Size, Sum_curved_setaeP1P5_default, Sum_spinesP6P7) %>% 
-  pivot_longer(contains("Sum"), names_to = "Trait2", values_to = "Count") %>% 
-  ggplot(aes(x = Size, y = Count, colour = Species)) + 
+  mutate(Large_spines = P7.larg.ep + P6.larg.ep,
+         Medium_spines = P7.med.ep + P6.med.ep,
+         Small_spines = P7.small.ep + P6.small.ep) %>% 
+  select(Species, Size, Large_spines, Medium_spines, Small_spines) %>% 
+  pivot_longer(contains("spines"), names_to = "Spine_size", values_to = "Count") %>% 
+  ggplot(aes(x = Size, y = Count, colour = Species)) +
   geom_point(size = 4, alpha = 0.7) +
-  geom_smooth(method = "lm", se = FALSE, lwd = 1.1) +
+  geom_smooth(se = FALSE, method = "lm") +
   scale_colour_manual(values = colours_species,
                       labels = c("forsmani" = "J. forsmani",
                                  "praehirsuta" = "J. praehirsuta")) +
-  facet_wrap(vars(Trait2), scales = "free_y",
-             labeller = as_labeller(c(
-               "Sum_curved_setaeP1P5_default" = "Number of sexual setae",
-               "Sum_spinesP6P7" = "Number of spines"
-             )),
-            strip.position = "left",
-            ncol = 1) +
   labs(x = "Size\n(mm)") +
+  facet_grid2(Spine_size ~ Species,
+             labeller = as_labeller(c(
+               "Large_spines" = "Number of\nlarge spines",
+               "Medium_spines" = "Number of\nmedium spines",
+               "Small_spines" = "Number of\nsmall spines",
+               "forsmani" = "J. forsmani",
+               "praehirsuta" = "J. praehirsuta")),
+             switch = "y") +
   my_theme +
   theme(legend.text = element_text(face = "italic"),
+        strip.text.x = element_text(face = "italic"),
         axis.title.y = element_blank(),
-        strip.placement = "outside",
-        strip.background = element_rect(fill = NA, colour = NA))
+        strip.background.y = element_blank(),
+        strip.text.y = element_text(size = 20),
+        strip.placement = "outside")
 
-size_trait_relationship
-ggsave(plot = size_trait_relationship,
-       filename = "../Figures/Suppfigs/Size_trait_covariance.png",
-       width = 800, height = 1000, units = "px", scale = 4)
+size_spine_size_indiv
+ggsave("../Figures/Suppfigs/Relationship_size_indiv_size_spines.png",
+       size_spine_size_indiv, scale = 4, units = "px",
+       height = 800, width = 1000)

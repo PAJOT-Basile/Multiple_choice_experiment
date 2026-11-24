@@ -62,27 +62,26 @@ date_data <- survival %>%
 ########################################################
 ###################### Plot data #######################
 ########################################################
-distribution_time_first_brood <- date_data %>% 
-  group_by(Species) %>% 
-  mutate(n = row_number()) %>% 
-  pivot_wider(names_from = Species, values_from = Time_first_brood, names_prefix = "Time_") %>% 
+distribution_time_first_brood <- date_data %>%
+  unique() %>% 
   ggplot() +
-  geom_histogram(data = . %>% 
-                   mutate(Species = "forsmani"),
-                 aes(x = Time_forsmani, y = ..count.., fill = Species),
-                 alpha = 0.7, position = "identity", colour = "black") + 
-  geom_histogram(data = . %>% 
-                   mutate(Species = "praehirsuta"),
-                 aes(x = Time_praehirsuta, y = -..count.., fill = Species),
-                 alpha = 0.7, position = "identity", colour = "black") + 
-  geom_hline(yintercept = 0, colour = "black", lwd = 0.8) + 
+  geom_violin(aes(x = Species, y = Time_first_brood, fill = Species),
+               alpha = 0.7, colour = "black",
+              quantile.linetype = c(2, 1, 2)) +
+  geom_point(aes(x = Species, y = Time_first_brood, fill = Species), pch = 21,
+             size = 3, position = position_jitter(width = 0.25, height = 0),
+             alpha = 0.7) +
   scale_fill_manual(values = colours_species,
                     labels = c("forsmani" = "J. forsmani",
                                "praehirsuta" = "J. praehirsuta")) +
-  labs(x = "Time to produce first brood\n(days)",
-       y = "Count") + 
+  scale_x_discrete(labels = c("forsmani" = "J. forsmani",
+                              "praehirsuta" = "J. praehirsuta")) +
+  scale_y_continuous(limits = c(0, NA)) +
+  labs(y = "Time to produce first brood\n(days)") + 
   my_theme +
-  theme(legend.text = element_text(face = "italic"))
+  theme(legend.text = element_text(face = "italic"),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(face = "italic"))
 
 distribution_time_first_brood
 ggsave(plot = distribution_time_first_brood,

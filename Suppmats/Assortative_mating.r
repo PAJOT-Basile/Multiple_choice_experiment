@@ -1,5 +1,8 @@
 #' This script is written to check for assortative mating (check if larger males
 #' reproduce with larger females or not)
+#' 
+#' Basile Pajot
+#' Last updated: 17/11/2026
 
 
 ########################################################
@@ -97,3 +100,60 @@ mate_choice_setae
 ggsave(mate_choice_setae,
        filename = "../Figures/Suppfigs/Relationship_size_female_setae_male.png",
        units = "px", width = 1200, height = 800, scale = 4)
+
+####################################################################
+###################### Plot size differences #######################
+####################################################################
+
+
+size_differences_realised_potential_couples <- expand_grid(metadata %>% 
+              filter(Species == "forsmani", Sex == "F") %>% 
+              pull(Size),
+            metadata %>% 
+              filter(Species == "forsmani", Sex == "M") %>% 
+              pull(Size)) %>% 
+  rename(Size_mom = "... %>% pull(Size)...1",
+         Size_dad = "... %>% pull(Size)...2") %>% 
+  mutate(Species = "forsmani") %>% 
+  rbind(expand_grid(metadata %>% 
+                      filter(Species == "praehirsuta", Sex == "F") %>% 
+                      pull(Size),
+                    metadata %>% 
+                      filter(Species == "praehirsuta", Sex == "M") %>% 
+                      pull(Size)) %>% 
+          rename(Size_mom = "... %>% pull(Size)...1",
+                 Size_dad = "... %>% pull(Size)...2") %>% 
+          mutate(Species = "praehirsuta")) %>% 
+  mutate(Group = "All possible") %>% 
+  rbind(Families_first_brood %>% 
+          select(Size_mom, Size_dad, Species) %>% 
+          mutate(Group = "Observed")) %>% 
+  mutate(Delta_size = Size_mom - Size_dad,
+         Sp_group = case_when(Group == "All possible" ~ "All possible",
+                              TRUE ~ paste(Group, Species))) %>% 
+  ggplot(aes(x = Group, y = Delta_size, fill = Sp_group)) +
+  geom_violin(quantile.linetype = c(2, 1, 2), alpha = 0.7, lwd = 1) +
+  geom_point(data = . %>% 
+               filter(Group != "All possible"), pch = 21,
+             size = 3, position = position_jitter(width = 0.25, height = 0)) +
+  scale_fill_manual(name = "Species",
+                    values = c("All possible" = "grey40",
+                               "Observed praehirsuta" = "navy",
+                               "Observed forsmani" = "#3A9AB2"),
+                    labels = c("All possible" = "All possible",
+                               "Observed praehirsuta" = expression("Observed " * italic("J. praehirsuta")),
+                               "Observed forsmani" = expression("Observed " * italic("J. forsmani"))),
+                    drop = TRUE) +
+  labs(y = "Size female - Size male\n(mm)") +
+  facet_wrap(vars(Species), nrow = 1,
+             labeller = as_labeller(c("forsmani" = "J. forsmani",
+                                      "praehirsuta" = "J. praehirsuta"))) +
+  my_theme +
+  theme(axis.title.x = element_blank(),
+        strip.text = element_text(face = "italic"))
+
+size_differences_realised_potential_couples
+ggsave("../Figures/Suppfigs/Size_differences_realised_potential_couples.png",
+       plot = size_differences_realised_potential_couples,
+       units = "px", scale = 4, width = 1000, height = 750)
+

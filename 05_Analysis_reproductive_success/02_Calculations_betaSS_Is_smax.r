@@ -1,10 +1,14 @@
-# Compute confidence intervals for different sexual selection parameters
-# and plot the distributions of their bootstraps:
-#   1. Bateman's gradient
-#   2. Opportunity for sexual selection
-#   3. Jones's index s'max
-
-# Finally, plot Bateman's gradient for the different sexes of the two species
+#' Compute confidence intervals for different sexual selection parameters
+#' and plot the distributions of their bootstraps:
+#'   1. Bateman's gradient
+#'   2. Opportunity for sexual selection
+#'   3. Jones's index s'max
+#'   
+#' Finally, plot Bateman's gradient for the different sexes of the two species
+#' 
+#' 
+#' Basile Pajot
+#' Last updated: 17/11/2026
 
 ########################################
 ############## Libraries ###############
@@ -429,20 +433,20 @@ distrib_w12_pm <- fitness_components %>%
 # Prepare the annotations
 ann1 <- ggplot() +
   geom_text(aes(x = 0, y = 0, label = "bold(Females)"),
-            parse = TRUE, size = 6, hjust = 0.75) +
+            parse = TRUE, size = 8, hjust = 0.75) +
   theme_void()
 ann2 <- ggplot() +
   geom_text(aes(x = 0, y = 0, label = "bold(Males)"),
-            parse = TRUE, size = 6, hjust = 0.5) +
+            parse = TRUE, size = 8, hjust = 0.5) +
   theme_void()
 
 ann3 <- ggplot() +
   geom_text(aes(x = 0, y = 0, label = "italic(J.~forsmani)"),
-            parse = TRUE, size = 6, hjust = 0.5, angle = 90) +
+            parse = TRUE, size = 8, hjust = 0.5, angle = 90) +
   theme_void()
 ann4 <- ggplot() +
   geom_text(aes(x = 0, y = 0, label = "italic(J.~praehirsuta)"),
-            parse = TRUE, size = 6, hjust = 0.5, angle = 90) +
+            parse = TRUE, size = 8, hjust = 0.5, angle = 90) +
   theme_void()
 
 ann5 <- ggplot() +

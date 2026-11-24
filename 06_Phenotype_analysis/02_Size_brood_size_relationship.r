@@ -1,5 +1,8 @@
 #' This script is written to look at the relationship in females between the 
 #' size of the individual and the size of the brood it produced.
+#' 
+#' Basile Pajot
+#' Last updated: 18/11/2026
 
 
 ########################################################
@@ -76,18 +79,49 @@ fitness_components <- fitness_components %>%
 ########################################################
 relationship <- fitness_components %>% 
   filter(Sex == "Female", W1 != 0) %>% 
-  ggplot(aes(x = Size, y = W12, colour = Species)) +
+  ggplot(aes(x = Size, y = W12, colour = Species, fill = Species)) +
   geom_point(alpha = 0.7, size = 3) +
-  geom_smooth(se = FALSE, method = "lm", lwd = 1.1) +
+  geom_point(data = fitness_components %>% 
+               filter(Sex == "Female", W1 == 0),
+             colour = "red", alpha = 0.7, size = 3) +
+  geom_smooth(method = "lm", lwd = 1.1) +
   scale_colour_manual(values = colours_species,
                       labels = c("forsmani" = "J. forsmani",
                                  "praehirsuta" = "J. praehirsuta")) +
+  scale_fill_manual(values = colours_species,
+                      labels = c("forsmani" = "J. forsmani",
+                                 "praehirsuta" = "J. praehirsuta")) +
   labs(x = "Female size\n(mm)",
-       y = "Number of offspring\n(W12)") + 
+       y = expression(atop("Number of offspring", "("*W[12]*")"))) + 
+  facet_wrap(vars(Species),
+             labeller = as_labeller(c(
+               "forsmani" = "J. forsmani",
+               "praehirsuta" = "J. praehirsuta"
+             ))) +
   my_theme +
-  theme(legend.text = element_text(face = "italic"))
+  theme(legend.text = element_text(face = "italic"),
+        strip.text = element_text(face = "italic"))
 
 relationship
 ggsave(plot = relationship,
-       filename = "../Figures/Suppfigs/Female_size_brood_size.png",
-       scale = 4, width = 800, height = 600, units = "px")
+       filename = "../Figures/Female_size_brood_size.png",
+       scale = 4, width = 1000, height = 600, units = "px")
+
+########################################################
+################## Regression models ###################
+########################################################
+# forsmani
+fitness_components %>% 
+  filter(Sex == "Female", W1 != 0,
+         Species == "forsmani",
+         !is.na(Size)) %>% 
+  lm(data = ., W12 ~ Size) %>% 
+  summary()
+
+# praehirsuta
+fitness_components %>% 
+  filter(Sex == "Female", W1 != 0,
+         Species == "praehirsuta",
+         !is.na(Size)) %>% 
+  lm(data = ., W12 ~ Size) %>% 
+  summary()

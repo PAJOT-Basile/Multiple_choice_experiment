@@ -1,11 +1,11 @@
-# Here, we want to try to map the standardised residuals of the number of spines
-# and the number of curved setae. To do this, the steps are:
-#     1. Import data
-#     2. Separate sexes
-#     3. Make a linear regression and extract the standardised residuals
-#     4. Prepare all the data to run the QTL analysis (phentype matrix, 
-#         relatedness matrix between individuals, genomic data)
-#     5. Run the QTL analysis
+#' Here, we want to try to map the standardised residuals of the number of spines
+#' and the number of curved setae. To do this, the steps are:
+#'     1. Import data
+#'     2. Separate sexes
+#'     3. Make a linear regression and extract the standardised residuals
+#'     4. Prepare all the data to run the QTL analysis (phentype matrix, 
+#'         relatedness matrix between individuals, genomic data)
+#'     5. Run the QTL analysis
 
 ########################################
 ############## Libraries ###############
