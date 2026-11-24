@@ -1,0 +1,118 @@
+#!/bin/python3
+###############################
+########## Libraries ##########
+###############################
+import pandas as pd
+import yaml
+import pysam as vcf
+print("Preparing header")
+
+###############################
+###### Useful functions #######
+###############################
+
+
+def get_samples_from_vcf(vcf_file):
+    i = 1
+    for rec in vcf_file.fetch():
+        if i > 1:
+            break
+        samples = rec.samples
+        i += 1
+    return (list(samples))
+
+
+def get_mean_sibship_parents(all_sibships_parents, sex="F"):
+    parent_sibship = round(
+        all_sibships_parents[(all_sibships_parents["sex"]
+                              == sex)]["count"].mean(),
+        ndigits=1
+    )
+    return (parent_sibship)
+
+
+###############################
+###### Import variables #######
+###############################
+with open("Data/Input.yaml", "r") as info:
+    config_file = yaml.safe_load(info)
+
+
+###############################
+######## Import data ##########
+###############################
+# Import the vcf file
+vcf_file = vcf.VariantFile(config_file["Input_file"])
+samples_from_vcf = get_samples_from_vcf(vcf_file)
+
+# Import metadata
+metadata = pd.read_csv(config_file["Metadata"], sep="\t", header=0)
+# Filter the metadata to keep only the individuals that are in the vcf
+metadata = metadata[metadata.ID_DNA_RAD.isin(samples_from_vcf)]
+
+details_parents_in_aquarium = pd.read_csv("/".join(config_file["Metadata"].split("/")[:-1]) + "/" + "Details_parents_in_aquarium.tsv",
+                                          sep="\t", header=0)
+
+###############################
+####### Compute stats #########
+###############################
+# Get the number of offsrping
+nb_offspring = len(metadata.query("Family_level == 'offspring'").index)
+
+# Get the mean sibship sizes for males and females
+all_sibships_parents = details_parents_in_aquarium.groupby(["sex", "GM"])[
+    "GM"].value_counts().reset_index()
+maternal_sibship = get_mean_sibship_parents(
+    all_sibships_parents=all_sibships_parents, sex="F")
+paternal_sibship = get_mean_sibship_parents(
+    all_sibships_parents=all_sibships_parents, sex="M")
+
+# Get the number of loci
+nb_loci = 0
+nb_alleles_per_loc = []
+for rec in vcf_file.fetch():
+    nb_loci += 1
+    nb_alleles_per_loc.append(len(rec.alleles))
+
+
+###############################
+#### Prepare output header ####
+###############################
+# Store the text to write in a variables so it can be concatenated
+start_text_to_write = f"""'{config_file["Output_name"]}'  !Dataset name
+'{config_file["Output_name"]}'  !Output file name
+{nb_offspring}  ! Number of offspring in the sample
+{nb_loci}  ! Number of loci
+{config_file["Random_seed"]}  ! Seed for random number generator
+{config_file["Update_allele_freq"]}  ! 0/1=Not updating/updating allele frequency
+{config_file["Dioecious_or_monoecious"]}  ! 2/1=Dioecious/Monoecious species
+{config_file["Inbreeding"]}  ! 0/1=No inbreeding/inbreeding
+{config_file["Ploidy"]}  ! 0/1=Diploid species/HaploDiploid species
+{config_file["Gamy"][0]}  {config_file["Gamy"][1]}  ! 0/1=Polygamy/Monogamy for males & females
+{config_file["Clone"]}  ! 0/1=Clone inference =No/Yes
+{config_file["Sibship_size_scaling"]}  ! 0/1=Full sibship size scaling =No/Yes
+{config_file["Sibship_size_prior"]} {paternal_sibship} {maternal_sibship}  ! 0,1,2,3=No,weak,medium,strong sibship size prior; mean paternal & maternal sibship size
+{config_file["Known_allele_freq"]}  ! 0/1=Unknown/Known population allele frequency"""
+
+if config_file["Known_allele_freq"] ==0:
+    text_allele_nb = ""
+else:
+    text_allele_nb = f"""{" ".join([str(x) for x in nb_alleles_per_loc])}  !Number of alleles per locus"""
+
+end_text_to_write = f"""
+{config_file["Nb_runs"]}  ! Number of runs
+{config_file["Length_run"]}  ! Length of run
+{config_file["Monitor_method_by_iterate_number_or_time_in_second"]}  ! 0/1=Monitor method by Iterate#/Time in second
+{config_file["Monitor_interval_in_iterate_number_in_second"]}  ! Monitor interval in Iterate# / in seconds
+{config_file["Windows_verion"]}  ! non-Windows version
+{config_file["Fulllikelihood"]}  ! Fulllikelihood
+{config_file["Precision_for_likelihood"]}  ! 1/2/3=low/medium/high Precision for Fulllikelihood
+
+"""
+
+text_to_write =  start_text_to_write + text_allele_nb + end_text_to_write
+
+
+# Write it to output file
+with open("".join([config_file["Outfolder"], "colony2.dat"]), "w+") as f:
+    f.write(text_to_write)
